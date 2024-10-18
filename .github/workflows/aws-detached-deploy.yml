@@ -49,9 +49,6 @@ on:
         description: "Specify if environment is running on AIO instance (string: yes/no)"
         required: false
 
-env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-
 jobs:
   Version:
     runs-on: [self-hosted, fastlane]
