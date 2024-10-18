@@ -22,7 +22,7 @@ env:
 
 jobs:
   Prepare:
-    runs-on: [self-hosted, protomodule]
+    runs-on: [self-hosted, fastlane]
 
     steps:
       -

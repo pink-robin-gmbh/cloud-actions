@@ -32,7 +32,7 @@ OUTPUT_HTML=
 OUTPUT_MD=
 SHORT=`git rev-parse --short HEAD`
 REPO_NAME=$(basename `git config --get remote.origin.url` .git)
-COMMIT_URL="https://github.com/saubermacherag/${REPO_NAME}/commit/"
+COMMIT_URL="https://github.com/pink-robin-gmbh/${REPO_NAME}/commit/"
 NUM_VERSIONS=30
 
 # Help
@@ -133,7 +133,7 @@ main () {
         TEMP_DIR="./tmp-$TEMP_DIR"
         mkdir "$TEMP_DIR"
         echo "🌍  Downloading styles"
-        curl -s -o "$TEMP_DIR/pinkrobin.min.css" https://raw.githubusercontent.com/saubermacherag/cloud-actions/main/templates/changelog/pinkrobin.min.css
+        curl -s -o "$TEMP_DIR/pinkrobin.min.css" https://raw.githubusercontent.com/pink-robin-gmbh/cloud-actions/main/templates/changelog/pinkrobin.min.css
         echo "📝  Writing temporary Markdown"
         echo "$MARKDOWN" > "$TEMP_DIR/changelog.md"
         echo "🔮  Converting Markdown to HTML"

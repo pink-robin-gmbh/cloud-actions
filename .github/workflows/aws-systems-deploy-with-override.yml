@@ -56,7 +56,7 @@ env:
 
 jobs:
   Version:
-    runs-on: [self-hosted, protomodule]
+    runs-on: [self-hosted, fastlane]
     environment:
       name: ${{ inputs.environment }}
     outputs:
@@ -73,7 +73,7 @@ jobs:
         id: version
         name: Derive version / tag
         run: |
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/saubermacherag/cloud-actions/main/helpers/generate-version.sh)" -- -j -s version
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/pink-robin-gmbh/cloud-actions/main/helpers/generate-version.sh)" -- -j -s version
           source version.sh
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "commit=$COMMIT" >> $GITHUB_OUTPUT
@@ -195,7 +195,7 @@ jobs:
           echo "| Auth override | $(echo "${{ inputs.version_auth }}" | sed 's/./& /g') |" >> $GITHUB_STEP_SUMMARY
 
   Refresh:
-    runs-on: [self-hosted, protomodule]
+    runs-on: [self-hosted, fastlane]
     needs: [Version]
     environment:
       name: ${{ inputs.environment }}

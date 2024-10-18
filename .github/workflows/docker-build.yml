@@ -54,8 +54,8 @@ jobs:
         name: Build and push to registry
         run: |
           DOCKERFILE=${{ inputs.dockerfile }}
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/saubermacherag/cloud-actions/main/helpers/generate-changelog.sh)" -- -x -n 100
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/saubermacherag/cloud-actions/main/helpers/docker-build.sh)" -- -a "--build-arg SENTRY_PROJECT=${{ inputs.sentry_project_name }} --build-arg SENTRY_TOKEN=${{ secrets.sentry_artifact_upload_token }}" -f ${DOCKERFILE:-Dockerfile} ${{ inputs.registry }}/${{ inputs.repository }}
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/pink-robin-gmbh/cloud-actions/main/helpers/generate-changelog.sh)" -- -x -n 100
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/pink-robin-gmbh/cloud-actions/main/helpers/docker-build.sh)" -- -a "--build-arg SENTRY_PROJECT=${{ inputs.sentry_project_name }} --build-arg SENTRY_TOKEN=${{ secrets.sentry_artifact_upload_token }}" -f ${DOCKERFILE:-Dockerfile} ${{ inputs.registry }}/${{ inputs.repository }}
       -
         id: output
         name: Set outputs

@@ -41,7 +41,7 @@ env:
 
 jobs:
   Refresh:
-    runs-on: [self-hosted, protomodule]
+    runs-on: [self-hosted, fastlane]
     environment:
       name: ${{ inputs.environment }}
 

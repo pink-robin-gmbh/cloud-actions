@@ -43,7 +43,7 @@ main () {
 
   echo "ℹ️   Preparing repository"
   git fetch
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/saubermacherag/cloud-actions/main/helpers/generate-version.sh)" -- -j -s version
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/pink-robin-gmbh/cloud-actions/main/helpers/generate-version.sh)" -- -j -s version
   source version.sh
 
   echo "🐳  Starting Docker build"

@@ -39,7 +39,7 @@ on:
 
 jobs:
   Deploy:
-    runs-on: [self-hosted, protomodule]
+    runs-on: [self-hosted, fastlane]
     environment:
       name: ${{ inputs.environment }}
 
@@ -69,7 +69,7 @@ jobs:
         id: version
         name: Get version information
         run: |
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/saubermacherag/cloud-actions/main/helpers/generate-version.sh)" -- -s version
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/pink-robin-gmbh/cloud-actions/main/helpers/generate-version.sh)" -- -s version
           source version.sh
 
           echo "version_info=$VERSION" >> $GITHUB_OUTPUT
@@ -86,7 +86,7 @@ jobs:
       - 
         name: Push to Heroku & release
         run: |
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/saubermacherag/cloud-actions/main/helpers/heroku-deploy.sh)" -- -k ${{ secrets.heroku_api_token }} -a ${{ steps.version.outputs.app_name }} -i ${{ inputs.registry }}/${{ inputs.repository}}:${{ steps.version.outputs.deployment_tag }}
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/pink-robin-gmbh/cloud-actions/main/helpers/heroku-deploy.sh)" -- -k ${{ secrets.heroku_api_token }} -a ${{ steps.version.outputs.app_name }} -i ${{ inputs.registry }}/${{ inputs.repository}}:${{ steps.version.outputs.deployment_tag }}
       -
         name: Summarize release
         run: |
