@@ -61,7 +61,7 @@ jobs:
     steps:
       -
         name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       -
@@ -82,7 +82,7 @@ jobs:
           if [ "$ENV_ID" = "unknown" ]; then echo "::error::GitHub Environment secret ENVIRONMENT_IDENTIFIER is missing"; exit 1; fi
       -
         name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1-node16
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.aws_access_key_id }}
           aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
@@ -147,7 +147,7 @@ jobs:
     steps:
       -
         name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1-node16
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.aws_access_key_id }}
           aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
