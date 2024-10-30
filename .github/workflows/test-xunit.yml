@@ -14,7 +14,7 @@ on:
 
 jobs:
   NPM:
-    runs-on: [self-hosted, protomodule]
+    runs-on: [self-hosted, performance]
     permissions:
       contents: read
       issues: read
