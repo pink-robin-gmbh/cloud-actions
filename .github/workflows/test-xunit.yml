@@ -10,7 +10,7 @@ on:
       runner:
         description: "Runner to use"
         type: string
-        default: "[self-hosted, performance]"
+        default: "self-hosted, performance"
       parameters:
         description: "Parameters to append to test command"
         type: string
