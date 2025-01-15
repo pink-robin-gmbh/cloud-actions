@@ -8,9 +8,9 @@ on:
         type: string
         default: "20-slim"
       runner:
-        description: "runner to use"
+        description: "instanz size to use for self hosted runner"
         type: string
-        default: "[self-hosted, performance]"
+        default: "performance"
       parameters:
         description: "Parameters to append to test command"
         type: string
@@ -18,7 +18,7 @@ on:
 
 jobs:
   NPM:
-    runs-on: ${{ inputs.runner }}
+    runs-on: [self-hosted, ${{ inputs.runner }}]
     permissions:
       contents: read
       issues: read
