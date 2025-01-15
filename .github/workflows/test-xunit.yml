@@ -7,6 +7,10 @@ on:
         description: "Node version to use for test execution"
         type: string
         default: "20-slim"
+      runner:
+        description: "runner to use"
+        type: string
+        default: "[self-hosted, performance]"
       parameters:
         description: "Parameters to append to test command"
         type: string
@@ -14,7 +18,7 @@ on:
 
 jobs:
   NPM:
-    runs-on: [self-hosted, performance]
+    runs-on: ${{ inputs.runner }}
     permissions:
       contents: read
       issues: read
