@@ -18,7 +18,7 @@ on:
 
 jobs:
   NPM:
-    runs-on: [self-hosted, ${{ inputs.runner }}]
+    runs-on: [self-hosted, "${{ inputs.runner }}"]
     permissions:
       contents: read
       issues: read
