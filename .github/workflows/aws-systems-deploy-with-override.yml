@@ -30,6 +30,9 @@ on:
       version_auth:
         description: "Override auth version"
         type: string
+      skip:
+        description: "Skip all jobs"
+        type: boolean
 
     secrets:
       aws_access_key_id:
@@ -54,6 +57,7 @@ on:
 jobs:
   Version:
     runs-on: [self-hosted, fastlane]
+    if: ${{ !inputs.skip }}
     environment:
       name: ${{ inputs.environment }}
     outputs:
