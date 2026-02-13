@@ -20,14 +20,6 @@ on:
         description: "Path/name of container repository (without registry URL)"
         type: string
         required: true
-      aws_access_key_id:
-        description: "AWS Access Key ID for Secrets Manager & ASG"
-        type: string
-        required: true
-      aws_region:
-        description: "AWS Region for Secrets Manager & ASG"
-        type: string
-        required: true
       version_core:
         description: "Override core version"
         type: string
@@ -44,6 +36,12 @@ on:
     secrets:
       aws_secret_access_key:
         description: "AWS Secret Access Key for Secrets Manager & ASG"
+        required: true
+      aws_access_key_id:
+        description: "AWS Access Key ID for Secrets Manager & ASG"
+        required: true
+      aws_region:
+        description: "AWS Region for Secrets Manager & ASG"
         required: true
 
 jobs:
