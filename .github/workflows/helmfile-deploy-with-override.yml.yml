@@ -1,0 +1,138 @@
+name: Deploy version on Kubernetes with Helmfile
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Deploy to'
+        default: Development
+        type: string
+        required: true
+      environment_identifier:
+        description: "Shortname/identifier of the selected environment"
+        type: string
+        required: true
+      environment_cluster:
+        description: "Name of the EKS cluster"
+        type: string
+        required: true
+      repository:
+        description: "Path/name of container repository (without registry URL)"
+        type: string
+        required: true
+      aws_access_key_id:
+        description: "AWS Access Key ID for Secrets Manager & ASG"
+        type: string
+        required: true
+      aws_region:
+        description: "AWS Region for Secrets Manager & ASG"
+        type: string
+        required: true
+      version_core:
+        description: "Override core version"
+        type: string
+      version_web:
+        description: "Override web version"
+        type: string
+      version_ui:
+        description: "Override UI version"
+        type: string
+      version_auth:
+        description: "Override auth version"
+        type: string
+
+    secrets:
+      aws_secret_access_key:
+        description: "AWS Secret Access Key for Secrets Manager & ASG"
+        required: true
+
+jobs:
+  Version:
+    runs-on: [self-hosted, fastlane]
+    environment:
+      name: ${{ inputs.environment }}
+    outputs:
+      commit: ${{ steps.version.outputs.commit }}
+      short: ${{ steps.version.outputs.short }}
+
+    steps:
+      -
+        name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      -
+        id: version
+        name: Derive version / tag
+        run: |
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/pink-robin-gmbh/cloud-actions/main/helpers/generate-version.sh)" -- -j -s version
+          source version.sh
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "commit=$COMMIT" >> $GITHUB_OUTPUT
+          echo "short=$SHORT" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "docker_tag=$DOCKER_TAG" >> $GITHUB_OUTPUT
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "deployment_tag=${DOCKER_TAG:-${LATEST_TAG:-main-latest}}" >> $GITHUB_OUTPUT
+          ENV_ID='${{ inputs.environment_identifier }}'
+          ENV_ID=${ENV_ID:-unknown}
+          if [ "$ENV_ID" = "unknown" ]; then echo "::error::Environment identifier is missing"; exit 1; fi
+
+          FALLBACK_VERSION="${DOCKER_TAG:-${LATEST_TAG:-main-latest}}"
+          VERSION_OVERRIDE='{"core":"${{ inputs.version_core }}","web":"${{ inputs.version_web }}","ui":"${{ inputs.version_ui }}","auth":"${{ inputs.version_auth }}"}'
+          VERSION_OUTPUTS='{}'
+          SYSTEMS='core,web,ui,auth'
+          for SYSTEM_NAME in ${SYSTEMS//,/ }
+          do
+            if [[ "$SYSTEM_NAME" != *"gateway"* ]]; then
+              SYSTEM_VERSION="$(echo "$VERSION_OVERRIDE" | jq -r ".\"${SYSTEM_NAME%%-*}\" // empty")"
+              SYSTEM_VERSION=${SYSTEM_VERSION:-$FALLBACK_VERSION}
+              SYSTEM_VERSION="$(echo "$SYSTEM_VERSION" | tr '[:upper:]' '[:lower:]')" # Convert to lowercase
+
+              # Sanitize tag / branch name
+              if [[ "$SYSTEM_VERSION" =~ ^v?([0-9]+)(\.([0-9]+)(\.([0-9]+))?)?$ ]]; then
+                SYSTEM_VERSION=${SYSTEM_VERSION#"v"}
+              else
+                SYSTEM_VERSION="$(echo ${SYSTEM_VERSION%-latest} | tr \/\. - | sed "s/[^0-9a-z\-]//g")-latest"
+              fi
+
+              # Add version to output
+              VERSION_OUTPUTS=$(jq -rc ".\"${SYSTEM_NAME//-/_}\" = \"$SYSTEM_VERSION\"" <<< "$VERSION_OUTPUTS")
+            fi
+          done
+
+          # Set output & log
+          echo "system_versions=$VERSION_OUTPUTS" >> $GITHUB_OUTPUT
+          echo "::notice::🏷️  Computed versions: $VERSION_OUTPUTS"
+      -
+        name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ inputs.aws_access_key_id }}
+          aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
+          aws-region: ${{ inputs.aws_region }}
+      -
+        name: Validate image availability
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+          echo "ℹ️  Check images on AWS Account $(echo "$ACCOUNT_ID" | sed 's/./& /g')"
+          FALLBACK_VERSION="${{ steps.version.outputs.deployment_tag }}"
+          SYSTEMS='core,web,ui,auth'
+          for SYSTEM_NAME in ${SYSTEMS//,/ }
+          do
+            if [[ "$SYSTEM_NAME" != *"gateway"* ]]; then
+              ECR_REPO=$(echo "${{ inputs.repository }}" | cut -d'-' -f 1 -)-$(echo "$SYSTEM_NAME" | cut -d'-' -f 1)
+              SELECTED_VERSION=$(echo '${{ steps.version.outputs.system_versions }}' | jq -rc ".\"${SYSTEM_NAME//-/_}\" // empty")
+              SYSTEM_VERSION=${SELECTED_VERSION:-$FALLBACK_VERSION}
+              if [[ "$(aws ecr describe-images --registry-id $ACCOUNT_ID --repository-name "$ECR_REPO" --image-ids imageTag="$SYSTEM_VERSION" | jq '.imageDetails | length')" == "1" ]]; then
+                echo "🐳  $ECR_REPO:$SYSTEM_VERSION exists";
+              else
+                echo "::error::❌  Docker image for $ECR_REPO:$(echo "$SYSTEM_VERSION" | sed 's/./& /g') not found";
+                exit 1
+              fi
+              echo "::notice::🐳  Docker image for $SYSTEM_NAME is available in version $SYSTEM_VERSION"
+            else
+              echo "::notice::⏭️  Skipping check for $SYSTEM_NAME"
+            fi 
+          done
+          echo "::notice::✅  Docker images for all systems are available in versions"
