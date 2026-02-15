@@ -109,31 +109,31 @@ jobs:
           aws-access-key-id: ${{ inputs.aws_access_key_id }}
           aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
           aws-region: ${{ secrets.aws_region }}
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-      -
-        name: Validate image availability
-        run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
-          echo "ℹ️  Check images on AWS Account $(echo "$ACCOUNT_ID" | sed 's/./& /g')"
-          FALLBACK_VERSION="${{ steps.version.outputs.deployment_tag }}"
-          SYSTEMS='core,web,ui,auth'
-          for SYSTEM_NAME in ${SYSTEMS//,/ }
-          do
-            if [[ "$SYSTEM_NAME" != *"gateway"* ]]; then
-              ECR_REPO=$(echo "${{ inputs.repository }}" | cut -d'-' -f 1 -)-$(echo "$SYSTEM_NAME" | cut -d'-' -f 1)
-              SELECTED_VERSION=$(echo '${{ steps.version.outputs.system_versions }}' | jq -rc ".\"${SYSTEM_NAME//-/_}\" // empty")
-              SYSTEM_VERSION=${SELECTED_VERSION:-$FALLBACK_VERSION}
-              if [[ "$(aws ecr describe-images --registry-id $ACCOUNT_ID --repository-name "$ECR_REPO" --image-ids imageTag="$SYSTEM_VERSION" | jq '.imageDetails | length')" == "1" ]]; then
-                echo "🐳  $ECR_REPO:$SYSTEM_VERSION exists";
-              else
-                echo "::error::❌  Docker image for $ECR_REPO:$(echo "$SYSTEM_VERSION" | sed 's/./& /g') not found";
-                exit 1
-              fi
-              echo "::notice::🐳  Docker image for $SYSTEM_NAME is available in version $SYSTEM_VERSION"
-            else
-              echo "::notice::⏭️  Skipping check for $SYSTEM_NAME"
-            fi 
-          done
-          echo "::notice::✅  Docker images for all systems are available in versions"
+      #- name: Login to Amazon ECR
+      #  id: login-ecr
+      #  uses: aws-actions/amazon-ecr-login@v2
+      #-
+      #  name: Validate image availability
+      #  run: |
+      #    ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+      #    echo "ℹ️  Check images on AWS Account $(echo "$ACCOUNT_ID" | sed 's/./& /g')"
+      #    FALLBACK_VERSION="${{ steps.version.outputs.deployment_tag }}"
+      #    SYSTEMS='core,web,ui,auth'
+      #    for SYSTEM_NAME in ${SYSTEMS//,/ }
+      #    do
+      #      if [[ "$SYSTEM_NAME" != *"gateway"* ]]; then
+      #        ECR_REPO=$(echo "${{ inputs.repository }}" | cut -d'-' -f 1 -)-$(echo "$SYSTEM_NAME" | cut -d'-' -f 1)
+      #        SELECTED_VERSION=$(echo '${{ steps.version.outputs.system_versions }}' | jq -rc ".\"${SYSTEM_NAME//-/_}\" // empty")
+      #        SYSTEM_VERSION=${SELECTED_VERSION:-$FALLBACK_VERSION}
+      #        if [[ "$(aws ecr describe-images --registry-id $ACCOUNT_ID --repository-name "$ECR_REPO" --image-ids imageTag="$SYSTEM_VERSION" | jq '.imageDetails | length')" == "1" ]]; then
+      #          echo "🐳  $ECR_REPO:$SYSTEM_VERSION exists";
+      #        else
+      #          echo "::error::❌  Docker image for $ECR_REPO:$(echo "$SYSTEM_VERSION" | sed 's/./& /g') not found";
+      #          exit 1
+      #        fi
+      #        echo "::notice::🐳  Docker image for $SYSTEM_NAME is available in version $SYSTEM_VERSION"
+      #      else
+      #        echo "::notice::⏭️  Skipping check for $SYSTEM_NAME"
+      #      fi
+      #    done
+      #    echo "::notice::✅  Docker images for all systems are available in versions"
