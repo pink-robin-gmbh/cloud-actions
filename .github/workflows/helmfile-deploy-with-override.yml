@@ -183,18 +183,24 @@ jobs:
 
       - name: Update and generate kubeconfig
         run: |
-          {
-            echo 'KUBE_CONFIG<<EOF'
-            aws eks update-kubeconfig --region ${{ secrets.aws_region }} --name ${{ inputs.environment_cluster }} --dry-run | base64
-            echo EOF
-          } >> $GITHUB_ENV
+          KUBE_CONFIG=$(aws eks update-kubeconfig --region ${{ secrets.aws_region }} --name ${{ inputs.environment_cluster }} --dry-run | base64)
+          echo "KUBE_CONFIG=$KUBE_CONFIG" >> $GITHUB_ENV
+
+      - name: Verify kubeconfig connectivity
+        uses: tale/kubectl-action@v1
+        with:
+          base64-kube-config: ${{ env.KUBE_CONFIG }}
+
+      - name: Test cluster connection
+        run: |
+          echo "::notice::Testing connection to EKS cluster: ${{ inputs.environment_cluster }}"
+          kubectl cluster-info
+          kubectl get nodes
+          echo "::notice::✅ Successfully connected to Kubernetes cluster"
 
       - name: Prepare Helmfile arguments
         id: prepare-helmfile
         run: |
-          # Build version override arguments (without apply/diff - will be added per step)
-          HELMFILE_ARGS="--environment ${{ inputs.environment_identifier }}"
-
           # Use computed versions from Version job
           SYSTEM_VERSIONS='${{ needs.Version.outputs.system_versions }}'
 
@@ -215,9 +221,6 @@ jobs:
           else
             echo "::warning::Could not extract computed versions"
           fi
-
-          echo "args=$HELMFILE_ARGS" >> $GITHUB_OUTPUT
-          echo "::notice::📦 Helmfile args: $HELMFILE_ARGS"
 
       - name: Helmfile Diff - Preview Changes
         uses: helmfile/helmfile-action@v2.2.0
