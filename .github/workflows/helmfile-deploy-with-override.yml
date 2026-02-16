@@ -183,8 +183,11 @@ jobs:
 
       - name: Update and generate kubeconfig
         run: |
-          KUBE_CONFIG=$(aws eks update-kubeconfig --region ${{ secrets.aws_region }} --name ${{ inputs.environment_cluster }} --dry-run | base64)
-          echo "KUBE_CONFIG=$KUBE_CONFIG" >> $GITHUB_ENV
+          {
+            echo 'KUBE_CONFIG<<EOF'
+            aws eks update-kubeconfig --region ${{ secrets.aws_region }} --name ${{ inputs.environment_cluster }} --dry-run | base64 -w 0
+            echo 'EOF'
+          } >> $GITHUB_ENV
 
       - name: Verify kubeconfig connectivity
         uses: tale/kubectl-action@v1
