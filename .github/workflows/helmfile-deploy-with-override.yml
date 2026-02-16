@@ -44,6 +44,17 @@ on:
         description: "AWS Region for Secrets Manager & ASG"
         required: true
 
+    outputs:
+      system_versions:
+        description: "Computed versions for all services"
+        value: ${{ jobs.Version.outputs.system_versions }}
+      commit:
+        description: "Git commit hash"
+        value: ${{ jobs.Version.outputs.commit }}
+      short:
+        description: "Short git hash"
+        value: ${{ jobs.Version.outputs.short }}
+
 jobs:
   Version:
     runs-on: [self-hosted, fastlane]
@@ -52,15 +63,15 @@ jobs:
     outputs:
       commit: ${{ steps.version.outputs.commit }}
       short: ${{ steps.version.outputs.short }}
+      system_versions: ${{ steps.version.outputs.system_versions }}
 
     steps:
-      -
-        name: Checkout source code
+      - name: Checkout source code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      -
-        id: version
+
+      - id: version
         name: Derive version / tag
         run: |
           /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/pink-robin-gmbh/cloud-actions/main/helpers/generate-version.sh)" -- -j -s version
@@ -102,38 +113,105 @@ jobs:
           # Set output & log
           echo "system_versions=$VERSION_OUTPUTS" >> $GITHUB_OUTPUT
           echo "::notice::🏷️  Computed versions: $VERSION_OUTPUTS"
-      -
-        name: Configure AWS Credentials
+
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ inputs.aws_access_key_id }}
+          aws-access-key-id: ${{ secrets.aws_access_key_id }}
           aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
           aws-region: ${{ secrets.aws_region }}
-      #- name: Login to Amazon ECR
-      #  id: login-ecr
-      #  uses: aws-actions/amazon-ecr-login@v2
-      #-
-      #  name: Validate image availability
-      #  run: |
-      #    ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
-      #    echo "ℹ️  Check images on AWS Account $(echo "$ACCOUNT_ID" | sed 's/./& /g')"
-      #    FALLBACK_VERSION="${{ steps.version.outputs.deployment_tag }}"
-      #    SYSTEMS='core,web,ui,auth'
-      #    for SYSTEM_NAME in ${SYSTEMS//,/ }
-      #    do
-      #      if [[ "$SYSTEM_NAME" != *"gateway"* ]]; then
-      #        ECR_REPO=$(echo "${{ inputs.repository }}" | cut -d'-' -f 1 -)-$(echo "$SYSTEM_NAME" | cut -d'-' -f 1)
-      #        SELECTED_VERSION=$(echo '${{ steps.version.outputs.system_versions }}' | jq -rc ".\"${SYSTEM_NAME//-/_}\" // empty")
-      #        SYSTEM_VERSION=${SELECTED_VERSION:-$FALLBACK_VERSION}
-      #        if [[ "$(aws ecr describe-images --registry-id $ACCOUNT_ID --repository-name "$ECR_REPO" --image-ids imageTag="$SYSTEM_VERSION" | jq '.imageDetails | length')" == "1" ]]; then
-      #          echo "🐳  $ECR_REPO:$SYSTEM_VERSION exists";
-      #        else
-      #          echo "::error::❌  Docker image for $ECR_REPO:$(echo "$SYSTEM_VERSION" | sed 's/./& /g') not found";
-      #          exit 1
-      #        fi
-      #        echo "::notice::🐳  Docker image for $SYSTEM_NAME is available in version $SYSTEM_VERSION"
-      #      else
-      #        echo "::notice::⏭️  Skipping check for $SYSTEM_NAME"
-      #      fi
-      #    done
-      #    echo "::notice::✅  Docker images for all systems are available in versions"
+
+  Deploy:
+    name: Deploy with Helmfile
+    needs: Version
+    runs-on: [self-hosted, fastlane]
+    environment:
+      name: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.aws_access_key_id }}
+          aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
+          aws-region: ${{ secrets.aws_region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Update and generate kubeconfig
+        run: |
+          {
+            echo 'KUBE_CONFIG<<EOF'
+            aws eks update-kubeconfig --region ${{ secrets.aws_region }} --name ${{ inputs.environment_cluster }} --dry-run | base64
+            echo EOF
+          } >> $GITHUB_ENV
+
+      - name: Prepare Helmfile arguments
+        id: prepare-helmfile
+        run: |
+          # Build version override arguments
+          HELMFILE_ARGS="apply --environment ${{ inputs.environment_identifier }}"
+
+          # Use computed versions from Version job
+          SYSTEM_VERSIONS='${{ needs.Version.outputs.system_versions }}'
+
+          if [ -n "$SYSTEM_VERSIONS" ] && [ "$SYSTEM_VERSIONS" != "null" ]; then
+            echo "::notice::Using computed versions from Version job"
+
+            # Extract versions from JSON
+            VERSION_AUTH=$(echo "$SYSTEM_VERSIONS" | jq -r '.auth // empty')
+            VERSION_CORE=$(echo "$SYSTEM_VERSIONS" | jq -r '.core // empty')
+            VERSION_WEB=$(echo "$SYSTEM_VERSIONS" | jq -r '.web // empty')
+            VERSION_UI=$(echo "$SYSTEM_VERSIONS" | jq -r '.ui // empty')
+
+            if [ -n "$VERSION_AUTH" ]; then
+              HELMFILE_ARGS="$HELMFILE_ARGS --state-values-set auth.image.tag=$VERSION_AUTH"
+              echo "::notice::🏷️  Auth version: $VERSION_AUTH"
+            fi
+
+            if [ -n "$VERSION_CORE" ]; then
+              HELMFILE_ARGS="$HELMFILE_ARGS --state-values-set api.image.tag=$VERSION_CORE"
+              echo "::notice::🏷️  Core/API version: $VERSION_CORE"
+            fi
+
+            if [ -n "$VERSION_WEB" ]; then
+              HELMFILE_ARGS="$HELMFILE_ARGS --state-values-set web.image.tag=$VERSION_WEB"
+              echo "::notice::🏷️  Web version: $VERSION_WEB"
+            fi
+
+            if [ -n "$VERSION_UI" ]; then
+              HELMFILE_ARGS="$HELMFILE_ARGS --state-values-set ui.image.tag=$VERSION_UI"
+              echo "::notice::🏷️  UI version: $VERSION_UI"
+            fi
+          else
+            echo "::warning::Could not extract computed versions"
+          fi
+
+          echo "args=$HELMFILE_ARGS" >> $GITHUB_OUTPUT
+          echo "::notice::📦 Helmfile args: $HELMFILE_ARGS"
+
+      - name: Deploy with Helmfile
+        uses: helmfile/helmfile-action@v1
+        with:
+          helmfile-args: --file deployment/helmfile.yaml.gotmpl ${{ steps.prepare-helmfile.outputs.args }}
+          helmfile-version: latest
+          helm-plugins: https://github.com/databus23/helm-diff
+        env:
+          KUBECONFIG_DATA: ${{ env.KUBE_CONFIG }}
+
+      - name: Verify deployment
+        uses: tale/kubectl-action@v1
+        with:
+          base64-kube-config: ${{ env.KUBE_CONFIG }}
+
+      - name: Check deployed pods
+        run: |
+          echo "::notice::Checking pods in namespace wastebox-${{ inputs.environment_identifier }}"
+          kubectl get pods -n wastebox-${{ inputs.environment_identifier }} --show-labels
