@@ -183,11 +183,19 @@ jobs:
 
       - name: Update and generate kubeconfig
         run: |
+          # Generate kubeconfig and save to environment variable
           {
             echo 'KUBE_CONFIG<<EOF'
             aws eks update-kubeconfig --region ${{ secrets.aws_region }} --name ${{ inputs.environment_cluster }} --dry-run | base64
             echo EOF
           } >> $GITHUB_ENV
+
+      - name: Write kubeconfig to file
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ env.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+          echo "::notice::✅ Kubeconfig written to $HOME/.kube/config"
 
       - name: Verify kubeconfig connectivity
         uses: tale/kubectl-action@v1
@@ -233,8 +241,6 @@ jobs:
             https://github.com/databus23/helm-diff@v3.1.3
           helmfile-args: diff --file ${{inputs.helmfile}} --environment ${{ inputs.environment_identifier }}
           helmfile-auto-init: 'false'
-        env:
-          KUBECONFIG_DATA: ${{ env.KUBE_CONFIG }}
 
       - name: Helmfile Apply - Sync Changes
         uses: helmfile/helmfile-action@v2.2.0
@@ -244,9 +250,6 @@ jobs:
             https://github.com/databus23/helm-diff@v3.1.3
           helmfile-args: sync --file ${{inputs.helmfile}} --environment ${{ inputs.environment_identifier }}
           helmfile-auto-init: 'false'
-        env:
-          KUBECONFIG_DATA: ${{ env.KUBE_CONFIG }}
-
       - name: Verify deployment
         uses: tale/kubectl-action@v1
         with:
