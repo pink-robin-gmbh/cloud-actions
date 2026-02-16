@@ -145,8 +145,6 @@ jobs:
             fi 
           done
           echo "::notice::✅  Docker images for all systems are available in versions"
-      -
-
   Deploy:
     name: Deploy with Helmfile
     needs: Version
