@@ -126,7 +126,7 @@ jobs:
           ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
           echo "ℹ️  Check images on AWS Account $(echo "$ACCOUNT_ID" | sed 's/./& /g')"
           FALLBACK_VERSION="${{ steps.version.outputs.deployment_tag }}"
-          SYSTEMS='${{ secrets.systems }}'
+          SYSTEMS='core,web,ui,auth'
           for SYSTEM_NAME in ${SYSTEMS//,/ }
           do
             if [[ "$SYSTEM_NAME" != *"gateway"* ]]; then
