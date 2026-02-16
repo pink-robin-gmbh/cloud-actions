@@ -185,8 +185,8 @@ jobs:
         run: |
           {
             echo 'KUBE_CONFIG<<EOF'
-            aws eks update-kubeconfig --region ${{ secrets.aws_region }} --name ${{ inputs.environment_cluster }} --dry-run | base64 -w 0
-            echo 'EOF'
+            aws eks update-kubeconfig --region ${{ secrets.aws_region }} --name ${{ inputs.environment_cluster }} --dry-run | base64
+            echo EOF
           } >> $GITHUB_ENV
 
       - name: Verify kubeconfig connectivity
