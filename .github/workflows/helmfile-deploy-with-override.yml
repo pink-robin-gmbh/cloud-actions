@@ -197,15 +197,15 @@ jobs:
           echo "args=$HELMFILE_ARGS" >> $GITHUB_OUTPUT
           echo "::notice::📦 Helmfile args: $HELMFILE_ARGS"
 
-      - name: Install Helm plugins
-        run: |
-          helm plugin install https://github.com/databus23/helm-diff --verify=false
-
       - name: Deploy with Helmfile
-        uses: helmfile/helmfile-action@v1
+        uses: helmfile/helmfile-action@v2.2.0
         with:
+          helmfile-version: 'v0.150.0'
+          helm-version: 'v3.11.0'
+          helm-plugins: >
+            https://github.com/databus23/helm-diff@v3.1.3
           helmfile-args: --file deployment/helmfile.yaml.gotmpl ${{ steps.prepare-helmfile.outputs.args }}
-          helmfile-version: latest
+          helmfile-auto-init: 'false'
         env:
           KUBECONFIG_DATA: ${{ env.KUBE_CONFIG }}
 
