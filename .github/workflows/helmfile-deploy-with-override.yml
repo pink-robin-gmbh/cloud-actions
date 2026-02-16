@@ -121,6 +121,32 @@ jobs:
           aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
           aws-region: ${{ secrets.aws_region }}
 
+      - name: Validate image availability
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+          echo "ℹ️  Check images on AWS Account $(echo "$ACCOUNT_ID" | sed 's/./& /g')"
+          FALLBACK_VERSION="${{ steps.version.outputs.deployment_tag }}"
+          SYSTEMS='${{ secrets.systems }}'
+          for SYSTEM_NAME in ${SYSTEMS//,/ }
+          do
+            if [[ "$SYSTEM_NAME" != *"gateway"* ]]; then
+              ECR_REPO=$(echo "${{ inputs.repository }}" | cut -d'-' -f 1 -)-$(echo "$SYSTEM_NAME" | cut -d'-' -f 1)
+              SELECTED_VERSION=$(echo '${{ steps.version.outputs.system_versions }}' | jq -rc ".\"${SYSTEM_NAME//-/_}\" // empty")
+              SYSTEM_VERSION=${SELECTED_VERSION:-$FALLBACK_VERSION}
+              if [[ "$(aws ecr describe-images --registry-id $ACCOUNT_ID --repository-name "$ECR_REPO" --image-ids imageTag="$SYSTEM_VERSION" | jq '.imageDetails | length')" == "1" ]]; then
+                echo "🐳  $ECR_REPO:$SYSTEM_VERSION exists";
+              else
+                echo "::error::❌  Docker image for $ECR_REPO:$(echo "$SYSTEM_VERSION" | sed 's/./& /g') not found";
+                exit 1
+              fi
+              echo "::notice::🐳  Docker image for $SYSTEM_NAME is available in version $SYSTEM_VERSION"
+            else
+              echo "::notice::⏭️  Skipping check for $SYSTEM_NAME"
+            fi 
+          done
+          echo "::notice::✅  Docker images for all systems are available in versions"
+      -
+
   Deploy:
     name: Deploy with Helmfile
     needs: Version
@@ -156,8 +182,8 @@ jobs:
       - name: Prepare Helmfile arguments
         id: prepare-helmfile
         run: |
-          # Build version override arguments
-          HELMFILE_ARGS="apply --environment ${{ inputs.environment_identifier }}"
+          # Build version override arguments (without apply/diff - will be added per step)
+          HELMFILE_ARGS="--environment ${{ inputs.environment_identifier }}"
 
           # Use computed versions from Version job
           SYSTEM_VERSIONS='${{ needs.Version.outputs.system_versions }}'
@@ -197,13 +223,24 @@ jobs:
           echo "args=$HELMFILE_ARGS" >> $GITHUB_OUTPUT
           echo "::notice::📦 Helmfile args: $HELMFILE_ARGS"
 
-      - name: Deploy with Helmfile
+      - name: Helmfile Diff - Preview Changes
         uses: helmfile/helmfile-action@v2.2.0
         with:
           helm-version: 'v3.11.0'
           helm-plugins: >
             https://github.com/databus23/helm-diff@v3.1.3
-          helmfile-args: --file deployment/helmfile.yaml.gotmpl ${{ steps.prepare-helmfile.outputs.args }}
+          helmfile-args: --file deployment/helmfile.yaml.gotmpl diff ${{ steps.prepare-helmfile.outputs.args }}
+          helmfile-auto-init: 'false'
+        env:
+          KUBECONFIG_DATA: ${{ env.KUBE_CONFIG }}
+
+      - name: Helmfile Apply - Sync Changes
+        uses: helmfile/helmfile-action@v2.2.0
+        with:
+          helm-version: 'v3.11.0'
+          helm-plugins: >
+            https://github.com/databus23/helm-diff@v3.1.3
+          helmfile-args: --file deployment/helmfile.yaml.gotmpl apply ${{ steps.prepare-helmfile.outputs.args }}
           helmfile-auto-init: 'false'
         env:
           KUBECONFIG_DATA: ${{ env.KUBE_CONFIG }}
