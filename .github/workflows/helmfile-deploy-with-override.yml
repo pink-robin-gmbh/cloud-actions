@@ -252,13 +252,11 @@ jobs:
 
       - name: Install helm-diff plugin
         run: |
-          if helm plugin list | grep -q "^diff"; then
-            echo "::notice::helm-diff already installed, updating..."
-            helm plugin update diff
+          if helm plugin list | grep -q "diff"; then
+            echo "::notice::helm-diff already installed: $(helm plugin list | grep diff)"
           else
-            helm plugin install https://github.com/databus23/helm-diff --verify=false
+            helm plugin install https://github.com/databus23/helm-diff
           fi
-          helm plugin list
 
       - name: Helmfile Diff - Preview Changes
         run: |
