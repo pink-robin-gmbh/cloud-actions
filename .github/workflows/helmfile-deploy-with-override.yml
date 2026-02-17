@@ -263,14 +263,21 @@ jobs:
 
       - name: Build Helm chart dependencies
         run: |
-          BITNAMI_URL=$(curl -sI -L --max-time 10 https://charts.bitnami.com/bitnami/index.yaml | grep -i '^location:' | tail -1 | awk '{print $2}' | tr -d '\r' | sed 's|/index.yaml||')
-          BITNAMI_URL=${BITNAMI_URL:-https://charts.bitnami.com/bitnami}
-          echo "::notice::Resolved Bitnami repo URL: $BITNAMI_URL"
-          helm repo add bitnami "$BITNAMI_URL" --force-update
           for chart in ${{ inputs.helmfile }}/charts/*/; do
             if [ -f "$chart/Chart.yaml" ]; then
-              echo "::notice::Updating dependencies for $chart"
-              helm dependency update "$chart"
+              echo "::notice::Pulling dependencies for $chart"
+              mkdir -p "$chart/charts"
+              while IFS=' ' read -r name version; do
+                echo "::notice::Pulling $name@$version from OCI"
+                helm pull "oci://registry-1.docker.io/bitnamicharts/$name" \
+                  --version "$version" \
+                  --untar --untardir "$chart/charts"
+              done < <(awk '
+                /^dependencies:/ { in_deps=1 }
+                in_deps && /name:/ { name=$2 }
+                in_deps && /version:/ { version=$2 }
+                in_deps && /repository:.*bitnami/ { print name, version }
+              ' "$chart/Chart.yaml")
             fi
           done
 
