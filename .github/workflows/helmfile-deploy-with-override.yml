@@ -233,8 +233,10 @@ jobs:
             echo "::warning::Could not extract computed versions"
           fi
 
-      - name: Check Helm version
-        run: helm version
+      - name: Install Helm
+        run: |
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.14.0 bash
+          helm version
 
       - name: Install Helmfile
         run: |
@@ -250,10 +252,11 @@ jobs:
 
       - name: Install helm-diff plugin
         run: |
-          # Force remove any existing helm-diff (may be incompatible with current Helm version)
-          rm -rf "$(helm env HELM_PLUGINS 2>/dev/null || echo "$HOME/.local/share/helm/plugins")/helm-diff"
-          # Install version compatible with Helm 3.11
-          helm plugin install https://github.com/databus23/helm-diff --version 3.8.1
+          if helm plugin list | grep -q "diff"; then
+            echo "::notice::helm-diff already installed: $(helm plugin list | grep diff)"
+          else
+            helm plugin install https://github.com/databus23/helm-diff
+          fi
 
       - name: Helmfile Diff - Preview Changes
         run: |
