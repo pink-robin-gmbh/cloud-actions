@@ -154,7 +154,7 @@ jobs:
               echo "::notice::🐳  Docker image for $SYSTEM_NAME is available in version $SYSTEM_VERSION"
             else
               echo "::notice::⏭️  Skipping check for $SYSTEM_NAME"
-            fi 
+            fi
           done
           echo "::notice::✅  Docker images for all systems are available in versions"
   Deploy:
@@ -223,12 +223,12 @@ jobs:
             VERSION_CORE=$(echo "$SYSTEM_VERSIONS" | jq -r '.core // empty')
             VERSION_WEB=$(echo "$SYSTEM_VERSIONS" | jq -r '.web // empty')
             VERSION_UI=$(echo "$SYSTEM_VERSIONS" | jq -r '.ui // empty')
-          
+
             echo "VERSION_AUTH=$VERSION_AUTH" >> $GITHUB_ENV
             echo "VERSION_CORE=$VERSION_CORE" >> $GITHUB_ENV
             echo "VERSION_WEB=$VERSION_WEB" >> $GITHUB_ENV
             echo "VERSION_UI=$VERSION_UI" >> $GITHUB_ENV
-   
+
           else
             echo "::warning::Could not extract computed versions"
           fi
@@ -252,17 +252,15 @@ jobs:
           helm plugin install https://github.com/databus23/helm-diff --verify=false
           echo "::notice::helm-diff: $(helm plugin list | grep diff)"
 
-          # Add Helm repos
-          timeout 180 helm --debug repo add bitnami https://charts.bitnami.com/bitnami
-          timeout 180 helm --debug repo update
-          echo "::notice::Helm repos: $(helm repo list)"
+          echo "::notice::Helm repos ready"
 
       - name: Build Helm chart dependencies
         run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
           for chart in ${{ inputs.helmfile }}/charts/*/; do
             if [ -f "$chart/Chart.yaml" ]; then
-              echo "::notice::Building dependencies for $chart"
-              helm dependency build "$chart"
+              echo "::notice::Updating dependencies for $chart"
+              helm dependency update "$chart"
             fi
           done
 
@@ -277,7 +275,7 @@ jobs:
       - name: Check deployed pods
         run: |
           echo "::notice::Rollout pods in namespace wastebox-${{ inputs.environment_identifier }}"
-          
+
           if [ -n "$RESTART" ] && [ -n "$NAMESPACE" ]; then
             echo "::notice:: Restarting deployment: $RESTART"
             kubectl rollout restart deployment -n $NAMESPACE -l $RESTART
