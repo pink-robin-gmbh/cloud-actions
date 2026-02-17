@@ -233,25 +233,35 @@ jobs:
             echo "::warning::Could not extract computed versions"
           fi
 
+      - name: Install Helm
+        run: |
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.11.0 bash
+          helm version
+
+      - name: Install Helmfile
+        run: |
+          curl -Lo /tmp/helmfile.tar.gz https://github.com/helmfile/helmfile/releases/download/v0.150.0/helmfile_linux_amd64.tar.gz
+          tar -xzf /tmp/helmfile.tar.gz -C /tmp helmfile
+          sudo mv /tmp/helmfile /usr/local/bin/helmfile
+          helmfile --version
+
+      - name: Install helm-diff plugin
+        run: |
+          if helm plugin list | grep -q "^diff"; then
+            echo "::notice::helm-diff already installed, updating..."
+            helm plugin update diff
+          else
+            helm plugin install https://github.com/databus23/helm-diff --verify=false
+          fi
+          helm plugin list
+
       - name: Helmfile Diff - Preview Changes
-        uses: helmfile/helmfile-action@v2.2.0
-        env:
-          KUBECONFIG: ${{ env.KUBECONFIG }}
-        with:
-          helm-version: 'v3.11.0'
-          helm-plugins: >
-            https://github.com/databus23/helm-diff@v3.1.3
-          helmfile-args: diff --file ${{inputs.helmfile}} --environment ${{ inputs.environment_identifier }}
-          helmfile-auto-init: 'true'
+        run: |
+          helmfile diff --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
 
       #- name: Helmfile Apply - Sync Changes
-      #  uses: helmfile/helmfile-action@v2.2.0
-      #  with:
-      #    helm-version: 'v3.11.0'
-      #    helm-plugins: >
-      #      https://github.com/databus23/helm-diff@v3.1.3
-      #    helmfile-args: sync --file ${{inputs.helmfile}} --environment ${{ inputs.environment_identifier }}
-      #    helmfile-auto-init: 'false'
+      #  run: |
+      #    helmfile sync --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
       - name: Verify deployment
         uses: tale/kubectl-action@v1
         with:
