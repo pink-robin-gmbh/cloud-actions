@@ -233,6 +233,15 @@ jobs:
             echo "::warning::Could not extract computed versions"
           fi
 
+      - name: Check network connectivity
+        run: |
+          echo "::notice::Checking connectivity to charts.bitnami.com..."
+          curl -v --max-time 10 https://charts.bitnami.com/bitnami/index.yaml 2>&1 | head -30 || echo "::warning::charts.bitnami.com unreachable"
+          echo "::notice::Checking DNS resolution..."
+          nslookup charts.bitnami.com || true
+          echo "::notice::Checking default route..."
+          ip route || true
+
       - name: Setup Helm, Helmfile and helm-diff
         run: |
           # Install Helm v4.1.1
@@ -253,8 +262,8 @@ jobs:
           echo "::notice::helm-diff: $(helm plugin list | grep diff)"
 
           # Add Helm repos
-          helm repo add bitnami https://charts.bitnami.com/bitnami
-          helm repo update
+          timeout 30 helm repo add bitnami https://charts.bitnami.com/bitnami || echo "::warning::Failed to add bitnami repo"
+          timeout 30 helm repo update || echo "::warning::Failed to update helm repos"
           echo "::notice::Helm repos: $(helm repo list)"
 
       - name: Build Helm chart dependencies
