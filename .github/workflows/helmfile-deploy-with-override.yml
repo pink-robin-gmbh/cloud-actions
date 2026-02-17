@@ -242,7 +242,7 @@ jobs:
           echo "::notice::helm: $(helm version --short)"
 
           # Install Helmfile v1.2.3
-          curl -Lo /tmp/helmfile.tar.gz https://github.com/helmfile/helmfile/releases/download/v1.2.3/helmfile_1.1.7_linux_amd64.tar.gz
+          curl -Lo /tmp/helmfile.tar.gz https://github.com/helmfile/helmfile/releases/download/v1.1.7/helmfile_1.1.7_linux_amd64.tar.gz
           tar -xzf /tmp/helmfile.tar.gz -C /tmp helmfile
           sudo mv /tmp/helmfile /usr/local/bin/helmfile
           echo "::notice::helmfile: $(helmfile --version)"
