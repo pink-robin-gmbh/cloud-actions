@@ -195,7 +195,7 @@ jobs:
           mkdir -p $HOME/.kube
           echo "${{ env.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
-          echo "::notice::✅ Kubeconfig written to $HOME/.kube/config"
+          echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV  # <-- expose it to following steps
 
       - name: Verify kubeconfig connectivity
         uses: tale/kubectl-action@v1
@@ -235,6 +235,8 @@ jobs:
 
       - name: Helmfile Diff - Preview Changes
         uses: helmfile/helmfile-action@v2.2.0
+        env:
+          KUBECONFIG: ${{ env.KUBECONFIG }}
         with:
           helm-version: 'v3.11.0'
           helm-plugins: >
