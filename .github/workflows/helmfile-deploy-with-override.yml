@@ -236,50 +236,29 @@ jobs:
       - name: Setup Helm, Helmfile and helm-diff
         run: |
           # Install Helm v4.1.1
-          curl -Lo /tmp/helm.tar.gz https://get.helm.sh/helm-v3.19.0-linux-amd64.tar.gz
+          curl -Lo /tmp/helm.tar.gz https://get.helm.sh/helm-v4.1.1-linux-amd64.tar.gz
           tar -xzf /tmp/helm.tar.gz -C /tmp linux-amd64/helm
           sudo mv /tmp/linux-amd64/helm /usr/local/bin/helm
           echo "::notice::helm: $(helm version --short)"
 
           # Install Helmfile v1.2.3
-          curl -Lo /tmp/helmfile.tar.gz https://github.com/helmfile/helmfile/releases/download/v1.1.7/helmfile_1.1.7_linux_amd64.tar.gz
+          curl -Lo /tmp/helmfile.tar.gz https://github.com/helmfile/helmfile/releases/download/v1.2.3/helmfile_1.2.3_linux_amd64.tar.gz
           tar -xzf /tmp/helmfile.tar.gz -C /tmp helmfile
           sudo mv /tmp/helmfile /usr/local/bin/helmfile
           echo "::notice::helmfile: $(helmfile --version)"
 
           # Install helm-diff (remove existing first to avoid conflicts)
           rm -rf /home/ec2-user/.local/share/helm/plugins/helm-diff
-          #helm plugin install https://github.com/databus23/helm-diff --verify=false
-          helm plugin install https://github.com/databus23/helm-diff
+          helm plugin install https://github.com/databus23/helm-diff --verify=false
           echo "::notice::helm-diff: $(helm plugin list | grep diff)"
 
           echo "::notice::Helm repos ready"
 
-      - name: Network validation
-        run: |
-          curl -v --max-time 10 https://charts.bitnami.com/bitnami/index.yaml
-          curl -4 -v --max-time 10 https://charts.bitnami.com/bitnami/index.yaml
-          curl -6 -v --max-time 10 https://charts.bitnami.com/bitnami/index.yaml || true
-
       - name: Build Helm chart dependencies
         run: |
-          for chart in ${{ inputs.helmfile }}/charts/*/; do
-            if [ -f "$chart/Chart.yaml" ]; then
-              echo "::notice::Pulling dependencies for $chart"
-              mkdir -p "$chart/charts"
-              while IFS=' ' read -r name version; do
-                echo "::notice::Pulling $name@$version from OCI"
-                helm pull "oci://registry-1.docker.io/bitnamicharts/$name" \
-                  --version "$version" \
-                  --untar --untardir "$chart/charts"
-              done < <(awk '
-                /^dependencies:/ { in_deps=1 }
-                in_deps && /name:/ { name=$NF }
-                in_deps && /version:/ { version=$NF }
-                in_deps && /repository:.*bitnami/ { print name, version }
-              ' "$chart/Chart.yaml")
-            fi
-          done
+          helm pull oci://registry-1.docker.io/bitnamicharts/redis \
+            --version 24.1.0 \
+            --untar --untardir ${{ inputs.helmfile }}/charts/api/charts
 
       - name: Helmfile Diff - Preview Changes
         run: |
