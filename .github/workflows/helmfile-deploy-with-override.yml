@@ -36,11 +36,10 @@ on:
         description: "Helmfile deployment file"
         type: string
         default: deployment
-
       restart:
         description: "Restart deployment"
         type: boolean
-        default: false
+        default: true
       namespace:
         description: "Namespace to deploy to"
         type: string
@@ -278,15 +277,16 @@ jobs:
         run: |
           helmfile diff --skip-deps --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
 
-      #- name: Helmfile Apply - Sync Changes
-      #  run: |
-      #    helmfile sync --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
+      - name: Helmfile Apply - Sync Changes
+        run: |
+          helmfile sync --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
 
       - name: Check deployed pods
         run: |
           echo "::notice::Rollout pods in namespace wastebox-${{ inputs.environment_identifier }}"
 
-          if [ -n "$RESTART" ] && [ -n "$NAMESPACE" ]; then
+          #if [ -n "$RESTART" ] && [ -n "$NAMESPACE" ]; then
             echo "::notice:: Restarting deployment: $RESTART"
-            kubectl rollout restart deployment -n $NAMESPACE -l $RESTART
-          fi
+            #kubectl rollout restart deployment -n $NAMESPACE -l $RESTART
+            kubectl rollout restart deployment -n wastebox-${{ inputs.environment_identifier }} -l true
+          #fi
