@@ -263,7 +263,10 @@ jobs:
 
       - name: Build Helm chart dependencies
         run: |
-          helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
+          BITNAMI_URL=$(curl -sI -L --max-time 10 https://charts.bitnami.com/bitnami/index.yaml | grep -i '^location:' | tail -1 | awk '{print $2}' | tr -d '\r' | sed 's|/index.yaml||')
+          BITNAMI_URL=${BITNAMI_URL:-https://charts.bitnami.com/bitnami}
+          echo "::notice::Resolved Bitnami repo URL: $BITNAMI_URL"
+          helm repo add bitnami "$BITNAMI_URL" --force-update
           for chart in ${{ inputs.helmfile }}/charts/*/; do
             if [ -f "$chart/Chart.yaml" ]; then
               echo "::notice::Updating dependencies for $chart"
