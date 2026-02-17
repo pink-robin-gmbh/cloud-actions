@@ -255,6 +255,12 @@ jobs:
 
           echo "::notice::Helm repos ready"
 
+      - name: Network validation
+        run: |
+          curl -v --max-time 10 https://charts.bitnami.com/bitnami/index.yaml
+          curl -4 -v --max-time 10 https://charts.bitnami.com/bitnami/index.yaml
+          curl -6 -v --max-time 10 https://charts.bitnami.com/bitnami/index.yaml || true
+
       - name: Build Helm chart dependencies
         run: |
           helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
