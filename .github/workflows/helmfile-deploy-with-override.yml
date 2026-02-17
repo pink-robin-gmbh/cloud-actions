@@ -252,9 +252,19 @@ jobs:
           helm plugin install https://github.com/databus23/helm-diff --verify=false
           echo "::notice::helm-diff: $(helm plugin list | grep diff)"
 
+      - name: Build Helm chart dependencies
+        run: |
+          HELMFILE_DIR=$(dirname "${{ inputs.helmfile }}")
+          for chart in "$HELMFILE_DIR"/charts/*/; do
+            if [ -f "$chart/Chart.yaml" ]; then
+              echo "::notice::Building dependencies for $chart"
+              helm dependency build "$chart"
+            fi
+          done
+
       - name: Helmfile Diff - Preview Changes
         run: |
-          helmfile diff --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
+          helmfile diff --skip-deps --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
 
       #- name: Helmfile Apply - Sync Changes
       #  run: |
