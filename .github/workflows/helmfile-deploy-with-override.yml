@@ -233,10 +233,8 @@ jobs:
             echo "::warning::Could not extract computed versions"
           fi
 
-      - name: Install Helm
-        run: |
-          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.11.0 bash
-          helm version
+      - name: Check Helm version
+        run: helm version
 
       - name: Install Helmfile
         run: |
