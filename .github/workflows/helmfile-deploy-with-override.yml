@@ -254,7 +254,7 @@ jobs:
 
       - name: Helmfile Diff - Preview Changes
         run: |
-          helmfile diff --skip-deps --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
+          helmfile diff --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
 
       #- name: Helmfile Apply - Sync Changes
       #  run: |
