@@ -252,7 +252,9 @@ jobs:
 
       - name: Install helm-diff plugin
         run: |
-          rm -rf "$HOME/.local/share/helm/plugins/helm-diff"
+          HELM_PLUGIN_DIR=$(helm env HELM_PLUGINS)
+          echo "::notice::Helm plugins dir: $HELM_PLUGIN_DIR"
+          rm -rf "${HELM_PLUGIN_DIR}/helm-diff"
           helm plugin install https://github.com/databus23/helm-diff
 
       - name: Helmfile Diff - Preview Changes
