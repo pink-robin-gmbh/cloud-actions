@@ -257,25 +257,14 @@ jobs:
         run: |
           for chart in ${{ inputs.helmfile }}/charts/*/; do
             if [ -f "$chart/Chart.yaml" ]; then
-              echo "::notice::Pulling dependencies for $chart"
-              mkdir -p "$chart/charts"
-              while IFS=' ' read -r name version; do
-                echo "::notice::Pulling $name@$version from OCI"
-                helm pull "oci://registry-1.docker.io/bitnamicharts/$name" \
-                  --version "$version" \
-                  --untar --untardir "$chart/charts"
-              done < <(awk '
-                /^dependencies:/ { in_deps=1 }
-                in_deps && /name:/ { name=$NF }
-                in_deps && /version:/ { version=$NF }
-                in_deps && /repository:.*bitnami/ { print name, version }
-              ' "$chart/Chart.yaml")
+              echo "::notice::Building dependencies for $chart"
+              helm dependency build "$chart"
             fi
           done
 
       - name: Helmfile Diff - Preview Changes
         run: |
-          helmfile diff --skip-deps --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
+          helmfile diff --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
 
       - name: Helmfile Apply - Sync Changes
         run: |
