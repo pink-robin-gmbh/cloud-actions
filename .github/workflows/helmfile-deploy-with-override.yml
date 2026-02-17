@@ -254,8 +254,7 @@ jobs:
 
       - name: Build Helm chart dependencies
         run: |
-          HELMFILE_DIR=$(dirname "${{ inputs.helmfile }}")
-          for chart in "$HELMFILE_DIR"/charts/*/; do
+          for chart in ${{ inputs.helmfile }}/charts/*/; do
             if [ -f "$chart/Chart.yaml" ]; then
               echo "::notice::Building dependencies for $chart"
               helm dependency build "$chart"
