@@ -233,29 +233,25 @@ jobs:
             echo "::warning::Could not extract computed versions"
           fi
 
-      - name: Install Helm
+      - name: Install Helm, Helmfile and helm-diff
         run: |
-          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.14.0 bash
-          helm version
+          # Install Helm 3.14.0 to /usr/local/bin
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.14.0 bash
+          echo "::notice::helm: $(which helm) - $(/usr/local/bin/helm version --short)"
 
-      - name: Install Helmfile
-        run: |
-          if command -v helmfile &>/dev/null; then
-            echo "::notice::helmfile already installed: $(helmfile --version)"
-          else
+          # Install Helmfile if not present
+          if ! command -v helmfile &>/dev/null; then
             HELMFILE_VERSION="v1.2.3"
             curl -Lo /tmp/helmfile.tar.gz "https://github.com/helmfile/helmfile/releases/download/${HELMFILE_VERSION}/helmfile_${HELMFILE_VERSION#v}_linux_amd64.tar.gz"
             tar -xzf /tmp/helmfile.tar.gz -C /tmp helmfile
             sudo mv /tmp/helmfile /usr/local/bin/helmfile
-            echo "::notice::helmfile installed: $(helmfile --version)"
           fi
+          echo "::notice::helmfile: $(helmfile --version)"
 
-      - name: Install helm-diff plugin
-        run: |
-          HELM_PLUGIN_DIR=$(helm env HELM_PLUGINS)
-          echo "::notice::Helm plugins dir: $HELM_PLUGIN_DIR"
-          rm -rf "${HELM_PLUGIN_DIR}/helm-diff"
-          helm plugin install https://github.com/databus23/helm-diff
+          # Remove incompatible helm-diff and reinstall using the new helm binary
+          rm -rf /home/ec2-user/.local/share/helm/plugins/helm-diff
+          /usr/local/bin/helm plugin install https://github.com/databus23/helm-diff
+          echo "::notice::helm-diff installed"
 
       - name: Helmfile Diff - Preview Changes
         run: |
