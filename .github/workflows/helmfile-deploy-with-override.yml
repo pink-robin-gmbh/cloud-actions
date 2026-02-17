@@ -252,21 +252,13 @@ jobs:
           helm plugin install https://github.com/databus23/helm-diff --verify=false
           echo "::notice::helm-diff: $(helm plugin list | grep diff)"
 
+          # Add Helm repos
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+          echo "::notice::Helm repos: $(helm repo list)"
+
       - name: Build Helm chart dependencies
         run: |
-          # Register all repos referenced in chart dependencies
-          for chart in ${{ inputs.helmfile }}/charts/*/; do
-            if [ -f "$chart/Chart.yaml" ]; then
-              while IFS= read -r repo_url; do
-                repo_name=$(echo "$repo_url" | sed 's|https\?://||' | tr '/.' '-' | sed 's/-$//')
-                echo "::notice::Adding repo $repo_name -> $repo_url"
-                timeout 30 helm repo add "$repo_name" "$repo_url" --force-update
-              done < <(grep '^\s*repository:' "$chart/Chart.yaml" | awk '{print $2}')
-            fi
-          done
-          timeout 60 helm repo update
-
-          # Build dependencies for each chart
           for chart in ${{ inputs.helmfile }}/charts/*/; do
             if [ -f "$chart/Chart.yaml" ]; then
               echo "::notice::Building dependencies for $chart"
