@@ -274,8 +274,8 @@ jobs:
                   --untar --untardir "$chart/charts"
               done < <(awk '
                 /^dependencies:/ { in_deps=1 }
-                in_deps && /name:/ { name=$2 }
-                in_deps && /version:/ { version=$2 }
+                in_deps && /name:/ { name=$NF }
+                in_deps && /version:/ { version=$NF }
                 in_deps && /repository:.*bitnami/ { print name, version }
               ' "$chart/Chart.yaml")
             fi
