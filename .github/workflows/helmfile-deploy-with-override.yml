@@ -233,25 +233,24 @@ jobs:
             echo "::warning::Could not extract computed versions"
           fi
 
-      - name: Install Helm, Helmfile and helm-diff
+      - name: Setup Helm, Helmfile and helm-diff
         run: |
-          # Install Helm 3.14.0 to /usr/local/bin
-          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.14.0 bash
-          echo "::notice::helm: $(which helm) - $(/usr/local/bin/helm version --short)"
+          # Install Helm v4.1.1
+          curl -Lo /tmp/helm.tar.gz https://get.helm.sh/helm-v4.1.1-linux-amd64.tar.gz
+          tar -xzf /tmp/helm.tar.gz -C /tmp linux-amd64/helm
+          sudo mv /tmp/linux-amd64/helm /usr/local/bin/helm
+          echo "::notice::helm: $(helm version --short)"
 
-          # Install Helmfile if not present
-          if ! command -v helmfile &>/dev/null; then
-            HELMFILE_VERSION="v1.2.3"
-            curl -Lo /tmp/helmfile.tar.gz "https://github.com/helmfile/helmfile/releases/download/${HELMFILE_VERSION}/helmfile_${HELMFILE_VERSION#v}_linux_amd64.tar.gz"
-            tar -xzf /tmp/helmfile.tar.gz -C /tmp helmfile
-            sudo mv /tmp/helmfile /usr/local/bin/helmfile
-          fi
+          # Install Helmfile v1.2.3
+          curl -Lo /tmp/helmfile.tar.gz https://github.com/helmfile/helmfile/releases/download/v1.2.3/helmfile_1.2.3_linux_amd64.tar.gz
+          tar -xzf /tmp/helmfile.tar.gz -C /tmp helmfile
+          sudo mv /tmp/helmfile /usr/local/bin/helmfile
           echo "::notice::helmfile: $(helmfile --version)"
 
-          # Remove incompatible helm-diff and reinstall using the new helm binary
+          # Install helm-diff (remove existing first to avoid conflicts)
           rm -rf /home/ec2-user/.local/share/helm/plugins/helm-diff
-          /usr/local/bin/helm plugin install https://github.com/databus23/helm-diff
-          echo "::notice::helm-diff installed"
+          helm plugin install https://github.com/databus23/helm-diff --verify=false
+          echo "::notice::helm-diff: $(helm plugin list | grep diff)"
 
       - name: Helmfile Diff - Preview Changes
         run: |
