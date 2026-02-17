@@ -254,17 +254,17 @@ jobs:
 
       - name: Build Helm chart dependencies
         run: |
-          # Add all Helm repos referenced in chart dependencies
+          # Register all repos referenced in chart dependencies
           for chart in ${{ inputs.helmfile }}/charts/*/; do
             if [ -f "$chart/Chart.yaml" ]; then
               while IFS= read -r repo_url; do
                 repo_name=$(echo "$repo_url" | sed 's|https\?://||' | tr '/.' '-' | sed 's/-$//')
                 echo "::notice::Adding repo $repo_name -> $repo_url"
-                helm repo add "$repo_name" "$repo_url" --force-update
+                timeout 30 helm repo add "$repo_name" "$repo_url" --force-update
               done < <(grep '^\s*repository:' "$chart/Chart.yaml" | awk '{print $2}')
             fi
           done
-          helm repo update
+          timeout 60 helm repo update
 
           # Build dependencies for each chart
           for chart in ${{ inputs.helmfile }}/charts/*/; do
