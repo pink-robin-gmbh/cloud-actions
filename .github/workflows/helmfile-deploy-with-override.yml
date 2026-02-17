@@ -254,23 +254,18 @@ jobs:
           rm -rf "$(helm env HELM_PLUGINS 2>/dev/null || echo "$HOME/.local/share/helm/plugins")/helm-diff"
           # Install version compatible with Helm 3.11
           helm plugin install https://github.com/databus23/helm-diff --version 3.8.1
-          helm plugin list
 
       - name: Helmfile Diff - Preview Changes
         run: |
-          helmfile diff --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
+          helmfile diff --skip-deps --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
 
       #- name: Helmfile Apply - Sync Changes
       #  run: |
       #    helmfile sync --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
-      - name: Verify deployment
-        uses: tale/kubectl-action@v1
-        with:
-          base64-kube-config: ${{ env.KUBE_CONFIG }}
 
       - name: Check deployed pods
         run: |
-          echo "::notice::Checking pods in namespace wastebox-${{ inputs.environment_identifier }}"
+          echo "::notice::Rollout pods in namespace wastebox-${{ inputs.environment_identifier }}"
           
           if [ -n "$RESTART" ] && [ -n "$NAMESPACE" ]; then
             echo "::notice:: Restarting deployment: $RESTART"
