@@ -189,24 +189,12 @@ jobs:
             echo EOF
           } >> $GITHUB_ENV
 
-      - name: Write kubeconfig to file
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ env.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-          echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV  # <-- expose it to following steps
-
-      - name: Verify kubeconfig connectivity
-        uses: tale/kubectl-action@v1
-        with:
-          base64-kube-config: ${{ env.KUBE_CONFIG }}
-
-      - name: Test cluster connection
-        run: |
-          echo "::notice::Testing connection to EKS cluster: ${{ inputs.environment_cluster }}"
-          kubectl cluster-info
-          kubectl get nodes
-          echo "::notice::✅ Successfully connected to Kubernetes cluster"
+      #- name: Write kubeconfig to file
+      #  run: |
+      #    mkdir -p $HOME/.kube
+      #    echo "${{ env.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+      #    chmod 600 $HOME/.kube/config
+      #    echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV  # <-- expose it to following steps
 
       - name: Prepare Helmfile arguments
         id: prepare-helmfile
@@ -253,6 +241,11 @@ jobs:
       #    helmfile-auto-init: 'false'
       #  env:
       #    KUBECONFIG_DATA: ${{ env.KUBE_CONFIG }}
+
+      - name: Verify kubeconfig connectivity
+        uses: tale/kubectl-action@v1
+        with:
+          base64-kube-config: ${{ env.KUBE_CONFIG }}
 
       - name: Check deployed pods
         run: |
