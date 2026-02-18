@@ -232,47 +232,27 @@ jobs:
             echo "::warning::Could not extract computed versions"
           fi
 
-      - name: Setup Helm, Helmfile and helm-diff
-        run: |
-          # Install Helm v4.1.1
-          curl -Lo /tmp/helm.tar.gz https://get.helm.sh/helm-v4.1.1-linux-amd64.tar.gz
-          tar -xzf /tmp/helm.tar.gz -C /tmp linux-amd64/helm
-          sudo mv /tmp/linux-amd64/helm /usr/local/bin/helm
-          echo "::notice::helm: $(helm version --short)"
-
-          # Install Helmfile v1.2.3
-          curl -Lo /tmp/helmfile.tar.gz https://github.com/helmfile/helmfile/releases/download/v1.2.3/helmfile_1.2.3_linux_amd64.tar.gz
-          tar -xzf /tmp/helmfile.tar.gz -C /tmp helmfile
-          sudo mv /tmp/helmfile /usr/local/bin/helmfile
-          echo "::notice::helmfile: $(helmfile --version)"
-
-          # Install helm-diff (remove existing first to avoid conflicts)
-          rm -rf /home/ec2-user/.local/share/helm/plugins/helm-diff
-          helm plugin install https://github.com/databus23/helm-diff --verify=false
-          echo "::notice::helm-diff: $(helm plugin list | grep diff)"
-          
-          
-          helm repo add bitnami https://charts.bitnami.com/bitnami
-
-          echo "::notice::Helm repos ready"
-
-      - name: Build Helm chart dependencies
-        run: |
-          for chart in ${{ inputs.helmfile }}/charts/*/; do
-            if [ -f "$chart/Chart.yaml" ]; then
-              echo "::notice::Building dependencies for $chart"
-              helm dependency update "$chart"
-              helm dependency build "$chart"   
-            fi
-          done
-
       - name: Helmfile Diff - Preview Changes
-        run: |
-          helmfile diff --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
+        uses: helmfile/helmfile-action@v2.2.0
+        with:
+          helm-version: 'v3.11.0'
+          helm-plugins: >
+            https://github.com/databus23/helm-diff@v3.1.3
+          helmfile-args: diff --file ${{inputs.helmfile}} --environment ${{ inputs.environment_identifier }}
+          helmfile-auto-init: 'false'
+        env:
+          KUBECONFIG_DATA: ${{ env.KUBE_CONFIG }}
 
       #- name: Helmfile Apply - Sync Changes
-      #  run: |
-      #    helmfile sync --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
+      #  uses: helmfile/helmfile-action@v2.2.0
+      #  with:
+      #    helm-version: 'v3.11.0'
+      #    helm-plugins: >
+      #      https://github.com/databus23/helm-diff@v3.1.3
+      #    helmfile-args: sync --file ${{inputs.helmfile}} --environment ${{ inputs.environment_identifier }}
+      #    helmfile-auto-init: 'false'
+      #  env:
+      #    KUBECONFIG_DATA: ${{ env.KUBE_CONFIG }}
 
       - name: Check deployed pods
         run: |
