@@ -228,6 +228,8 @@ jobs:
             https://github.com/databus23/helm-diff@v3.9.4
           helmfile-args: diff --file ${{inputs.helmfile}} --environment ${{ inputs.environment_identifier }}
           helmfile-auto-init: 'false'
+        env:
+          KUBECONFIG_DATA: ${{ env.KUBE_CONFIG }}
 
       #- name: Helmfile Apply - Sync Changes
       #  uses: helmfile/helmfile-action@v2.2.0
