@@ -258,7 +258,7 @@ jobs:
           for chart in ${{ inputs.helmfile }}/charts/*/; do
             if [ -f "$chart/Chart.yaml" ]; then
               echo "::notice::Building dependencies for $chart"
-              helm dependency build "$chart"
+              helm dependency build --skip-refresh "$chart"
             fi
           done
 
