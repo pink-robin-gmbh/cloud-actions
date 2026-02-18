@@ -68,7 +68,7 @@ on:
 
 jobs:
   Version:
-    runs-on: [ self-hosted, fastlane ]
+    runs-on: [ ubuntu-slim]
     environment:
       name: ${{ inputs.environment }}
     outputs:
@@ -159,7 +159,7 @@ jobs:
   Deploy:
     name: Deploy with Helmfile
     needs: Version
-    runs-on: [ self-hosted, fastlane ]
+    runs-on: [ ubuntu-slim ]
     environment:
       name: ${{ inputs.environment }}
 
