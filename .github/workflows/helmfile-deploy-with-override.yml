@@ -252,7 +252,7 @@ jobs:
           echo "::notice::helm-diff: $(helm plugin list | grep diff)"
           
           
-          helm add repo bitnami https://charts.bitnami.com/bitnami
+          helm repo add bitnami https://charts.bitnami.com/bitnami
 
           echo "::notice::Helm repos ready"
 
