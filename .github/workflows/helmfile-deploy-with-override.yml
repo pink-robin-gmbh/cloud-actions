@@ -250,6 +250,9 @@ jobs:
           rm -rf /home/ec2-user/.local/share/helm/plugins/helm-diff
           helm plugin install https://github.com/databus23/helm-diff --verify=false
           echo "::notice::helm-diff: $(helm plugin list | grep diff)"
+          
+          
+          helm add repo bitnami https://charts.bitnami.com/bitnami
 
           echo "::notice::Helm repos ready"
 
@@ -265,11 +268,11 @@ jobs:
 
       - name: Helmfile Diff - Preview Changes
         run: |
-          helmfile diff --skip-deps --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
+          helmfile diff --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
 
-      - name: Helmfile Apply - Sync Changes
-        run: |
-          helmfile sync --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
+      #- name: Helmfile Apply - Sync Changes
+      #  run: |
+      #    helmfile sync --file ${{ inputs.helmfile }} --environment ${{ inputs.environment_identifier }}
 
       - name: Check deployed pods
         run: |
