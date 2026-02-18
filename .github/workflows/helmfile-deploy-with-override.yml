@@ -67,7 +67,7 @@ on:
 
 jobs:
   Version:
-    runs-on: [ ubuntu-slim]
+    runs-on: [self-hosted, fastlane]
     environment:
       name: ${{ inputs.environment }}
     outputs:
