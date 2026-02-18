@@ -32,6 +32,16 @@ on:
       version_auth:
         description: "Override auth version"
         type: string
+      helmfile:
+        description: "Helmfile deployment file"
+        type: string
+        default: deployment
+      restart:
+        description: "Label selector for deployments to restart"
+        type: string
+      namespace:
+        description: "Namespace to deploy to"
+        type: string
 
     secrets:
       aws_secret_access_key:
@@ -44,23 +54,34 @@ on:
         description: "AWS Region for Secrets Manager & ASG"
         required: true
 
+    outputs:
+      system_versions:
+        description: "Computed versions for all services"
+        value: ${{ jobs.Version.outputs.system_versions }}
+      commit:
+        description: "Git commit hash"
+        value: ${{ jobs.Version.outputs.commit }}
+      short:
+        description: "Short git hash"
+        value: ${{ jobs.Version.outputs.short }}
+
 jobs:
   Version:
-    runs-on: [self-hosted, fastlane]
+    runs-on: [ubuntu-slim]
     environment:
       name: ${{ inputs.environment }}
     outputs:
       commit: ${{ steps.version.outputs.commit }}
       short: ${{ steps.version.outputs.short }}
+      system_versions: ${{ steps.version.outputs.system_versions }}
 
     steps:
-      -
-        name: Checkout source code
+      - name: Checkout source code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      -
-        id: version
+
+      - id: version
         name: Derive version / tag
         run: |
           /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/pink-robin-gmbh/cloud-actions/main/helpers/generate-version.sh)" -- -j -s version
@@ -102,15 +123,15 @@ jobs:
           # Set output & log
           echo "system_versions=$VERSION_OUTPUTS" >> $GITHUB_OUTPUT
           echo "::notice::🏷️  Computed versions: $VERSION_OUTPUTS"
-      -
-        name: Configure AWS Credentials
+
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ inputs.aws_access_key_id }}
+          aws-access-key-id: ${{ secrets.aws_access_key_id }}
           aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
-          aws-region: ${{ inputs.aws_region }}
-      -
-        name: Validate image availability
+          aws-region: ${{ secrets.aws_region }}
+
+      - name: Validate image availability
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
           echo "ℹ️  Check images on AWS Account $(echo "$ACCOUNT_ID" | sed 's/./& /g')"
@@ -131,6 +152,100 @@ jobs:
               echo "::notice::🐳  Docker image for $SYSTEM_NAME is available in version $SYSTEM_VERSION"
             else
               echo "::notice::⏭️  Skipping check for $SYSTEM_NAME"
-            fi 
+            fi
           done
           echo "::notice::✅  Docker images for all systems are available in versions"
+  Deploy:
+    name: Deploy with Helmfile
+    needs: Version
+    runs-on: [ubuntu-slim]
+    environment:
+      name: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.aws_access_key_id }}
+          aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
+          aws-region: ${{ secrets.aws_region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          aws eks update-kubeconfig --region ${{ secrets.aws_region }} --name ${{ inputs.environment_cluster }} --dry-run > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+          KUBE_CONFIG_B64=$(base64 < $HOME/.kube/config)
+          {
+            echo 'KUBE_CONFIG<<EOF'
+            echo "$KUBE_CONFIG_B64"
+            echo EOF
+          } >> $GITHUB_ENV
+          echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
+
+      - name: Prepare Helmfile arguments
+        id: prepare-helmfile
+        run: |
+          # Use computed versions from Version job
+          SYSTEM_VERSIONS='${{ needs.Version.outputs.system_versions }}'
+
+          if [ -n "$SYSTEM_VERSIONS" ] && [ "$SYSTEM_VERSIONS" != "null" ]; then
+            echo "::notice::Using computed versions from Version job"
+
+            # Extract versions from JSON
+            VERSION_AUTH=$(echo "$SYSTEM_VERSIONS" | jq -r '.auth // empty')
+            VERSION_CORE=$(echo "$SYSTEM_VERSIONS" | jq -r '.core // empty')
+            VERSION_WEB=$(echo "$SYSTEM_VERSIONS" | jq -r '.web // empty')
+            VERSION_UI=$(echo "$SYSTEM_VERSIONS" | jq -r '.ui // empty')
+
+            echo "VERSION_AUTH=$VERSION_AUTH" >> $GITHUB_ENV
+            echo "VERSION_CORE=$VERSION_CORE" >> $GITHUB_ENV
+            echo "VERSION_WEB=$VERSION_WEB" >> $GITHUB_ENV
+            echo "VERSION_UI=$VERSION_UI" >> $GITHUB_ENV
+
+          else
+            echo "::warning::Could not extract computed versions"
+          fi
+
+      - name: Helmfile Diff - Preview Changes
+        uses: helmfile/helmfile-action@v2.2.0
+        with:
+          helm-version: 'v3.11.0'
+          helm-plugins: >
+            https://github.com/databus23/helm-diff@v3.9.4
+          helmfile-args: diff --file ${{inputs.helmfile}} --environment ${{ inputs.environment_identifier }}
+          helmfile-auto-init: 'false'
+        env:
+          KUBECONFIG_DATA: ${{ env.KUBE_CONFIG }}
+
+      - name: Helmfile Apply - Sync Changes
+        uses: helmfile/helmfile-action@v2.2.0
+        with:
+          helm-version: 'v3.11.0'
+          helm-plugins: >
+            https://github.com/databus23/helm-diff@v3.9.4
+          helmfile-args: sync --file ${{inputs.helmfile}} --environment ${{ inputs.environment_identifier }}
+          helmfile-auto-init: 'false'
+        env:
+          KUBECONFIG_DATA: ${{ env.KUBE_CONFIG }}
+
+      - name: Install kubectl
+        uses: tale/kubectl-action@v1
+        with:
+          base64-kube-config: ${{ env.KUBE_CONFIG }}
+
+      - name: Check deployed pods
+        run: |
+          if [[ -n "${{ inputs.restart }}" && -n "${{ inputs.namespace }}" ]]; then
+            echo "::notice:: Restarting deployments matching '${{ inputs.restart }}' in namespace: ${{ inputs.namespace }}"
+            kubectl rollout restart deployment -n "${{ inputs.namespace }}" -l "${{ inputs.restart }}"
+          fi
