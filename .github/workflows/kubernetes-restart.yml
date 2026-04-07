@@ -1,0 +1,61 @@
+name: Restart deployments on Kubernetes
+
+on:
+  workflow_call:
+    inputs:
+      cluster:
+        description: "Name of the EKS cluster"
+        type: string
+        required: true
+      restart:
+        description: "Label selector for deployments to restart"
+        type: string
+      namespace:
+        description: "Namespace of deployments to restart"
+        type: string
+        required: true
+
+    secrets:
+      aws_secret_access_key:
+        description: "AWS Secret Access Key for Secrets Manager & ASG"
+        required: true
+      aws_access_key_id:
+        description: "AWS Access Key ID for Secrets Manager & ASG"
+        required: true
+      aws_region:
+        description: "AWS Region for Secrets Manager & ASG"
+        required: true
+
+jobs:
+  Restart:
+    runs-on: [ubuntu-slim]
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.aws_access_key_id }}
+          aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
+          aws-region: ${{ secrets.aws_region }}
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Setup kubeconfig
+        # Inputs are passed as environment variables to prevent script injection
+        env:
+          CLUSTER_NAME: ${{ inputs.cluster }}
+        run: |
+          aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
+
+      - name: Restart via kubectl
+        # Inputs are passed as environment variables to prevent script injection
+        env:
+          NAMESPACE: ${{ inputs.namespace }}
+          RESTART: ${{ inputs.restart }}
+        run: |
+          if [ -z "$RESTART" ]; then
+            echo "::warning::No label selector provided — restarting ALL deployments in $NAMESPACE"
+          else
+            echo "::notice::Restarting deployments matching '$RESTART' in namespace: $NAMESPACE"
+          fi
+          kubectl rollout restart deployment -n "$NAMESPACE" ${RESTART:+-l "$RESTART"}
