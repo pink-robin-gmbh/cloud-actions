@@ -14,6 +14,29 @@ This library contains shared workflows for projects managed and build by Pink Ro
  * `heroku-deploy.yml` ... Used to deploy a container stack on Heroku
  * `test-xunit.yml` ... Run yarn or npm test and convert tap report to xunit for proper display in GitHub
 
+## Slack test-run report action
+
+Parses an xUnit report and posts a summary to Slack. Set `SLACK_BOT_TOKEN`
+(with `chat:write` access) as a secret and `SLACK_CHANNEL_ID` as a repository
+variable.
+
+```yaml
+- name: Report test run to Slack
+  if: always()
+  continue-on-error: true
+  uses: pink-robin-gmbh/cloud-actions/.github/actions/test-run-report@main
+  with:
+    report-path: results/report.xml
+    test-outcome: ${{ steps.tests.outcome }}
+    workflow: ${{ github.workflow }}
+    branch: ${{ github.ref_name }}
+    commit: ${{ github.sha }}
+    event-name: ${{ github.event_name }}
+    run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    channel-id: ${{ vars.SLACK_CHANNEL_ID }}
+    bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
+```
+
 ## Glossary
 
  - **Application**: Name for an application (i.e. wastebox)
