@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="5" failures="1" errors="1" skipped="1" time="42.7">
+  <testsuite name="orders" tests="3" failures="1" errors="0" skipped="0" time="28.4">
+    <testcase classname="integration.orders" name="creates order" time="10.2" />
+    <testcase classname="integration.orders" name="rejects invalid delivery date" time="8.1">
+      <failure message="expected HTTP 400, got 500">Expected validation error was not returned.</failure>
+    </testcase>
+    <testcase classname="integration.orders" name="retries a transient request" time="10.1" />
+  </testsuite>
+  <testsuite name="authentication" tests="2" failures="0" errors="1" skipped="1" time="14.3">
+    <testcase classname="integration.auth" name="rejects expired session" time="7.3">
+      <error message="request timed out">The response did not arrive within the test timeout.</error>
+    </testcase>
+    <testcase classname="integration.auth" name="skips unavailable provider" time="7.0">
+      <skipped message="Provider is disabled in this environment" />
+    </testcase>
+  </testsuite>
+</testsuites>

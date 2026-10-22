@@ -1,0 +1,40 @@
+name: Test Slack report formatting
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel-id:
+        description: Slack test channel ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    name: Post sample test report
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+      - name: Upload sample report
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Slack report formatting sample
+          path: tests/fixtures/slack-report.xml
+      - name: Post sample report to Slack
+        uses: ./.github/actions/test-run-report
+        with:
+          report-path: tests/fixtures/slack-report.xml
+          test-outcome: failure
+          workflow: ${{ github.workflow }}
+          branch: ${{ github.ref_name }}
+          commit: ${{ github.sha }}
+          event-name: ${{ github.event_name }}
+          manual-context: Synthetic xUnit fixture
+          run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          artifact-url: ${{ steps.artifact.outputs.artifact-url }}
+          channel-id: ${{ inputs.channel-id }}
+          bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
