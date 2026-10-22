@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="ui" tests="3" failures="1" errors="1" skipped="1" time="12.5">
+  <testcase classname="ui.orders" name="submits order" />
+  <testcase classname="ui.orders" name="shows validation error">
+    <failure message="assertion failed">expected text not found</failure>
+  </testcase>
+  <testcase classname="ui.auth" name="unavailable auth flow">
+    <error message="browser timeout" />
+  </testcase>
+  <testcase classname="ui.prices" name="skips disabled test">
+    <skipped />
+  </testcase>
+</testsuite>

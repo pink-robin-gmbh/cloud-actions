@@ -1,0 +1,64 @@
+name: Slack test run report
+description: Normalize xUnit reports and post a safe test summary to Slack
+inputs:
+  report-path:
+    description: Path to the xUnit report
+    required: true
+  test-outcome:
+    description: Outcome of the test execution step
+    required: true
+  test-duration-seconds:
+    description: Elapsed test execution duration when the report has no usable timing
+    required: false
+  workflow:
+    description: Workflow name
+    required: true
+  branch:
+    description: Branch or ref name
+    required: true
+  commit:
+    description: Commit SHA
+    required: true
+  event-name:
+    description: GitHub event name
+    required: true
+  manual-context:
+    description: Manual-run version overrides and deployment settings
+    required: false
+  run-url:
+    description: URL of the GitHub Actions run
+    required: true
+  artifact-url:
+    description: URL of the uploaded test artifact
+    required: false
+  channel-id:
+    description: Slack channel ID
+    required: true
+  bot-token:
+    description: Slack bot token with chat:write permission
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "24"
+    - name: Parse report and post Slack summary
+      shell: bash
+      env:
+        REPORT_PATH: ${{ inputs.report-path }}
+        TEST_OUTCOME: ${{ inputs.test-outcome }}
+        TEST_DURATION_SECONDS: ${{ inputs.test-duration-seconds }}
+        WORKFLOW: ${{ inputs.workflow }}
+        BRANCH: ${{ inputs.branch }}
+        COMMIT: ${{ inputs.commit }}
+        EVENT_NAME: ${{ inputs.event-name }}
+        MANUAL_CONTEXT: ${{ inputs.manual-context }}
+        RUN_URL: ${{ inputs.run-url }}
+        ARTIFACT_URL: ${{ inputs.artifact-url }}
+        SLACK_CHANNEL_ID: ${{ inputs.channel-id }}
+        SLACK_BOT_TOKEN: ${{ inputs.bot-token }}
+      run: |
+        npm ci --prefix "$GITHUB_ACTION_PATH" --ignore-scripts --no-audit --no-fund
+        node "$GITHUB_ACTION_PATH/report.js"

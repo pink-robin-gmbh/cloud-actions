@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="4" failures="1" errors="1" skipped="1">
+  <testsuite name="integration" tests="4" failures="1" errors="1" skipped="1">
+    <testcase classname="integration.orders" name="creates order" />
+    <testcase classname="integration.orders" name="rejects invalid order">
+      <failure message="expected 400, got 500">assertion detail</failure>
+    </testcase>
+    <testcase classname="integration.auth" name="login timeout">
+      <error message="connection refused" />
+    </testcase>
+    <testcase classname="integration.prices" name="skips unavailable price">
+      <skipped />
+    </testcase>
+  </testsuite>
+</testsuites>

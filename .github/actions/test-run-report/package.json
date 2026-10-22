@@ -1,0 +1,12 @@
+{
+  "name": "slack-test-run-report",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Runtime dependency for the shared Slack test report action",
+  "scripts": {
+    "test": "node --test ../../../tests/report.test.js"
+  },
+  "dependencies": {
+    "fast-xml-parser": "5.11.2"
+  }
+}
