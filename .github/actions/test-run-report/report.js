@@ -6,6 +6,7 @@ const MAX_FAILURE_DETAIL_LENGTH = 900;
 const MAX_FAILURE_VALUES_LENGTH = 2400;
 const MAX_FAILURE_NAME_LENGTH = 180;
 const MAX_FAILURES_IN_BLOCKS = 43;
+const MAX_FAILURES_IN_DETAILS = 4;
 
 const CREDENTIAL_PATTERNS = [
     /\b[A-Z0-9_-]*(?:AUTHORIZATION|PASSWORD|PASSWD|SECRET|TOKEN|API[_-]?KEY|CLIENT[_-]?SECRET)[A-Z0-9_-]*\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^,\s"'<>]+)/gi,
@@ -359,7 +360,9 @@ function formatBlocks(report, metadata, reportError, secret = '') {
         blockLink(metadata.runUrl, secret) || blockLink(metadata.artifactUrl, secret),
     );
     if (failures.length) {
-        const availableSlots = 50 - blocks.length - 2 - (hasActions ? 1 : 0);
+        const hasFailureValues = failures.some((failure) => failure.values);
+        const availableSlots = 50 - blocks.length - 2 - (hasActions ? 1 : 0)
+            - (hasFailureValues ? 1 : 0);
         const displayedFailures = failures.slice(0, Math.min(MAX_FAILURES_IN_BLOCKS, availableSlots));
         blocks.push({ type: 'divider' });
         const more = displayedFailures.length < failures.length
@@ -374,18 +377,32 @@ function formatBlocks(report, metadata, reportError, secret = '') {
                 || 'unnamed test';
             const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
             const kind = failure.kind === 'error' ? 'ERROR' : 'FAIL';
-            const childBlocks = [{
+            blocks.push({
                 type: 'section',
                 text: {
-                    type: 'plain_text',
-                    text: `Test: ${fullName}\nReason: ${detail || 'Reason unavailable in xUnit report.'}`,
+                    type: 'mrkdwn',
+                    text: `*${kind} · ${fullName}*\n> ${detail || 'Reason unavailable in xUnit report.'}`,
                 },
-            }];
-            if (failure.values) {
+            });
+        }
+        const detailFailures = displayedFailures.filter((failure) => failure.values)
+            .slice(0, MAX_FAILURES_IN_DETAILS);
+        if (detailFailures.length) {
+            const childBlocks = [];
+            for (const failure of detailFailures) {
+                const name = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH)
+                    || 'unnamed test';
+                const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
                 const values = sanitizeCode(failure.values, secret);
                 const clipped = values.length > MAX_FAILURE_VALUES_LENGTH;
                 const preview = values.slice(0, MAX_FAILURE_VALUES_LENGTH);
                 childBlocks.push({
+                    type: 'section',
+                    text: {
+                        type: 'plain_text',
+                        text: `${name}\n${detail || 'Reason unavailable in xUnit report.'}`,
+                    },
+                }, {
                     type: 'section',
                     text: {
                         type: 'mrkdwn',
@@ -393,11 +410,19 @@ function formatBlocks(report, metadata, reportError, secret = '') {
                     },
                 });
             }
+            const omitted = displayedFailures.filter((failure) => failure.values).length
+                - detailFailures.length;
+            if (omitted) {
+                childBlocks.push({
+                    type: 'section',
+                    text: { type: 'plain_text', text: `${omitted} more failure diffs omitted` },
+                });
+            }
             blocks.push({
                 type: 'container',
                 title: {
                     type: 'plain_text',
-                    text: `${kind} · ${fullName}`.slice(0, 150),
+                    text: `Failure details (${displayedFailures.filter((failure) => failure.values).length})`,
                 },
                 width: 'full',
                 is_collapsible: true,
