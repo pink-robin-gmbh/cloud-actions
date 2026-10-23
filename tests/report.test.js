@@ -145,6 +145,7 @@ test('formats a Block Kit summary with metrics, failure details, and safe link b
     const report = {
         passed: 2,
         failed: 1,
+        errors: 0,
         skipped: 1,
         executed: 3,
         failures: [{ name: 'test @here *notify*', detail: 'API_TOKEN=verysecret' }],
@@ -156,11 +157,16 @@ test('formats a Block Kit summary with metrics, failure details, and safe link b
     assert.match(blocks[0].text.text, /❌ FAILURE/);
     assert.deepEqual(
         blocks[1].fields.map((field) => field.text),
-        ['Executed\n3', 'Passed\n2', 'Failed\n1', 'Skipped\n1', 'Duration\n1m 2s'],
+        ['✔ Passed\n2', '💤 Skipped\n1', '❌ Failed\n1', '🔥 Errors\n0', '🧪 Total tests\n4', '⏱ Duration\n1m 2s'],
     );
     assert.match(JSON.stringify(blocks), /test \[at\]here \[star\]notify\[star\]/);
     assert.match(JSON.stringify(blocks), /\[redacted\]/);
     assert.doesNotMatch(JSON.stringify(blocks), /@here|verysecret/);
+    const missingReason = formatBlocks({
+        ...report,
+        failures: [{ name: 'unknown test', detail: '' }],
+    }, metadata);
+    assert.match(JSON.stringify(missingReason), /Reason unavailable in xUnit report/);
     assert.deepEqual(blocks.at(-1).elements.map((button) => button.text.text), [
         'Open workflow run',
     ]);
@@ -171,6 +177,7 @@ test('formats compact and failure-first Block Kit layouts', () => {
     const report = {
         passed: 2,
         failed: 2,
+        errors: 1,
         skipped: 1,
         executed: 4,
         failures: [
@@ -193,6 +200,23 @@ test('formats compact and failure-first Block Kit layouts', () => {
     assert.equal(failureFirst.at(-1).type, 'actions');
 });
 
+test('shows the exact failing test and both xUnit reason fields in the dashboard', () => {
+    const report = parseReport(path.join(fixturesPath, 'slack-report.xml'));
+    const blocks = formatBlocks(report, metadata);
+    const rendered = JSON.stringify(blocks);
+
+    assert.deepEqual(
+        blocks[1].fields.map((field) => field.text),
+        ['✔ Passed\n2', '💤 Skipped\n1', '❌ Failed\n1', '🔥 Errors\n1', '🧪 Total tests\n5', '⏱ Duration\n43s'],
+    );
+    assert.match(rendered, /❌ integration\.orders: rejects invalid delivery date/);
+    assert.match(rendered, /expected HTTP 400, got 500 — Expected validation error was not returned/);
+    assert.match(rendered, /🔥 integration\.auth: rejects expired session/);
+    assert.match(rendered, /request timed out — The response did not arrive within the test timeout/);
+    assert.ok(blocks.findIndex((block) => block.type === 'divider')
+        > blocks.findIndex((block) => block.fields));
+});
+
 test('bounds Block Kit failure details and omits unsafe links', () => {
     const report = {
         passed: 0,
@@ -212,9 +236,9 @@ test('bounds Block Kit failure details and omits unsafe links', () => {
     });
 
     assert.ok(blocks.length <= 50);
-    assert.match(blocks[4].text.text, /showing first 43/);
+    assert.match(blocks[3].text.text, /showing first 43/);
     assert.equal(blocks.filter((block) => block.type === 'section').length, 45);
-    assert.equal(blocks.at(-1).type, 'section');
+    assert.equal(blocks.at(-1).type, 'context');
     assert.equal(blocks.some((block) => block.type === 'actions'), false);
     assert.equal(oversizedUrlBlocks.some((block) => block.type === 'actions'), false);
 });
