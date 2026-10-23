@@ -189,21 +189,19 @@ test('shows the exact failing test and both xUnit reason fields in the dashboard
         blocks[1].fields.map((field) => field.text),
         ['*Passed*\n594', '*Skipped*\n5', '*Failures*\n4', '*Errors*\n0', '*Total tests*\n603', '*Duration*\nunavailable'],
     );
-    assert.match(rendered, /FAIL · #4 integration › Users › getUsersOfGroup/);
+    assert.match(rendered, /\*FAIL · #4 integration › Users › getUsersOfGroup/);
     const testNameBlock = blocks.find((block) => block.type === 'container'
-        && block.title.text.includes('#20 integration'));
+        && block.child_blocks.some((child) => child.text.text.includes('#20 integration')));
     assert.ok(testNameBlock);
-    assert.match(testNameBlock.title.text, /order_complete/);
-    assert.doesNotMatch(testNameBlock.title.text, /\\/);
+    assert.equal(testNameBlock.title.text, 'Failure details (4)');
+    assert.match(testNameBlock.child_blocks[2].text.text, /order_complete/);
+    assert.doesNotMatch(testNameBlock.child_blocks[2].text.text, /\\_/);
     assert.equal(testNameBlock.width, 'full');
-    const detailsBlock = blocks.find((block) => block.type === 'container');
-    assert.ok(detailsBlock);
-    assert.match(detailsBlock.title.text, /^FAIL · #4 integration › Users/);
-    assert.equal(detailsBlock.is_collapsible, true);
-    assert.equal(detailsBlock.default_collapsed, true);
-    assert.match(detailsBlock.child_blocks[0].text.text, /Did not match snapshot/);
-    assert.match(detailsBlock.child_blocks[1].text.text, /```[\s\S]*\+\s+\{/);
-    assert.match(detailsBlock.child_blocks[1].text.text, /averageRating: null/);
+    assert.equal(testNameBlock.is_collapsible, true);
+    assert.equal(testNameBlock.default_collapsed, true);
+    assert.match(testNameBlock.child_blocks[0].text.text, /#4 integration[\s\S]*Did not match snapshot/);
+    assert.match(testNameBlock.child_blocks[1].text.text, /```[\s\S]*\+\s+\{/);
+    assert.match(testNameBlock.child_blocks[1].text.text, /averageRating: null/);
     assert.match(rendered, /FAIL · #20 integration › UseCases/);
     assert.ok(blocks.findIndex((block) => block.type === 'divider')
         > blocks.findIndex((block) => block.type === 'context'));
@@ -235,7 +233,9 @@ test('bounds Block Kit failure details and omits unsafe links', () => {
     assert.ok(valuesBlocks.length <= 50);
     assert.match(valuesBlocks[4].text.text, /showing first 43/);
     assert.match(blocks[4].text.text, /showing first 43/);
-    assert.equal(blocks.filter((block) => block.type === 'container').length, 43);
+    assert.equal(valuesBlocks.filter((block) => block.type === 'container').length, 1);
+    assert.equal(valuesBlocks.find((block) => block.type === 'container').child_blocks.length, 9);
+    assert.equal(blocks.filter((block) => block.type === 'container').length, 0);
     assert.equal(blocks[2].type, 'context');
     assert.equal(oversizedUrlBlocks[2].type, 'context');
     assert.equal(blocks.some((block) => block.type === 'actions'), false);
