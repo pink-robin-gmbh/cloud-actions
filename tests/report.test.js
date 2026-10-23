@@ -173,7 +173,7 @@ test('formats a Block Kit summary with metrics, failure details, and safe link b
         'Open workflow run',
     ]);
     assert.equal(blocks.at(-1).elements[0].url, metadata.runUrl);
-    assert.equal(blocks.at(-2).type, 'divider');
+    assert.equal(blocks.at(-1).type, 'actions');
 });
 
 test('shows the exact failing test and both xUnit reason fields in the dashboard', () => {
@@ -419,7 +419,6 @@ test('posts the summary with one collapsible box containing failure details', as
     assert.match(renderedDetails, /\*Did not match snapshot\*/);
     assert.match(renderedDetails, /averageRating: null/);
     assert.match(renderedDetails, /#20 integration/);
-    assert.equal(messages[0].blocks.at(-2).type, 'divider');
     assert.equal(messages[0].blocks.at(-1).type, 'actions');
     assert.equal(messages[0].thread_ts, undefined);
 });
