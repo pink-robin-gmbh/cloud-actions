@@ -222,8 +222,6 @@ function metadataLines(metadata, secret) {
     ];
     if (metadata.eventName === 'workflow_dispatch') {
         lines.push('Manual run');
-        const manualContext = sanitizeText(metadata.manualContext, secret).slice(0, 700);
-        if (manualContext) lines.push(`Overrides: ${manualContext}`);
     }
     return lines;
 }
@@ -357,8 +355,6 @@ function formatBlocks(report, metadata, reportError, secret = '') {
     const context = [{ type: 'plain_text', text: `Branch: ${branch} · Commit: ${commit}` }];
     if (metadata.eventName === 'workflow_dispatch') {
         context.push({ type: 'plain_text', text: 'Manual run' });
-        const manualContext = sanitizeText(metadata.manualContext, secret).slice(0, 700);
-        if (manualContext) context.push({ type: 'plain_text', text: `Overrides: ${manualContext}` });
     }
     blocks.push({ type: 'context', elements: context });
 
@@ -455,7 +451,6 @@ async function main(environment = process.env) {
         branch: environment.BRANCH,
         commit: environment.COMMIT,
         eventName: environment.EVENT_NAME,
-        manualContext: environment.MANUAL_CONTEXT,
         runUrl: environment.RUN_URL,
         artifactUrl: environment.ARTIFACT_URL,
         testOutcome: environment.TEST_OUTCOME,

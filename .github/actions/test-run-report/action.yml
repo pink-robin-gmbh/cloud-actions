@@ -22,9 +22,6 @@ inputs:
   event-name:
     description: GitHub event name
     required: true
-  manual-context:
-    description: Manual-run version overrides and deployment settings
-    required: false
   run-url:
     description: URL of the GitHub Actions run
     required: true
@@ -54,7 +51,6 @@ runs:
         BRANCH: ${{ inputs.branch }}
         COMMIT: ${{ inputs.commit }}
         EVENT_NAME: ${{ inputs.event-name }}
-        MANUAL_CONTEXT: ${{ inputs.manual-context }}
         RUN_URL: ${{ inputs.run-url }}
         ARTIFACT_URL: ${{ inputs.artifact-url }}
         SLACK_CHANNEL_ID: ${{ inputs.channel-id }}

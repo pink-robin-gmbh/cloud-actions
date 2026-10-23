@@ -33,7 +33,6 @@ jobs:
           branch: ${{ github.ref_name }}
           commit: ${{ github.sha }}
           event-name: ${{ github.event_name }}
-          manual-context: Synthetic xUnit fixture
           run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           artifact-url: ${{ steps.artifact.outputs.artifact-url }}
           channel-id: ${{ inputs.channel-id }}
