@@ -60,7 +60,9 @@ function scalarText(value) {
     if (typeof value === 'string' || typeof value === 'number') return String(value);
     if (Array.isArray(value)) return scalarText(value[0]);
     if (!value || typeof value !== 'object') return '';
-    return String(value['@_message'] || value['#text'] || '');
+    const message = String(value['@_message'] || '').trim();
+    const body = String(value['#text'] || '').split(/\r?\n/).map((line) => line.trim()).find(Boolean) || '';
+    return [message, body && body !== message ? body : ''].filter(Boolean).join(' — ');
 }
 
 function failureDetail(testCase) {
@@ -104,6 +106,7 @@ function parseReport(reportPath, elapsedSeconds) {
     const cases = findCases(root);
     let passed = 0;
     let failed = 0;
+    let errors = 0;
     let skipped = 0;
     const failures = [];
 
@@ -115,8 +118,10 @@ function parseReport(reportPath, elapsedSeconds) {
         const className = getAttribute(testCase, 'classname');
         if (hasFailure || hasError) {
             failed += 1;
+            if (hasError) errors += 1;
             failures.push({
                 name: `${className ? `${className}: ` : ''}${name}`,
+                kind: hasError ? 'error' : 'failure',
                 detail: failureDetail(testCase),
             });
         } else if (Object.prototype.hasOwnProperty.call(testCase, 'skipped')) {
@@ -150,6 +155,7 @@ function parseReport(reportPath, elapsedSeconds) {
     return {
         passed,
         failed,
+        errors,
         skipped,
         executed: passed + failed,
         failures,
@@ -316,14 +322,16 @@ function formatBlocks(report, metadata, reportError, secret = '', layout = 'dash
     }
 
     if (!reportError && layout !== 'compact') {
+        const errors = report.errors || 0;
         blocks.push({
             type: 'section',
             fields: [
-                { type: 'plain_text', text: `Executed\n${report.executed}`, emoji: true },
-                { type: 'plain_text', text: `Passed\n${report.passed}`, emoji: true },
-                { type: 'plain_text', text: `Failed\n${report.failed}`, emoji: true },
-                { type: 'plain_text', text: `Skipped\n${report.skipped}`, emoji: true },
-                { type: 'plain_text', text: `Duration\n${formatDuration(report.durationSeconds)}`, emoji: true },
+                { type: 'plain_text', text: `✔ Passed\n${report.passed}`, emoji: true },
+                { type: 'plain_text', text: `💤 Skipped\n${report.skipped}`, emoji: true },
+                { type: 'plain_text', text: `❌ Failed\n${report.failed - errors}`, emoji: true },
+                { type: 'plain_text', text: `🔥 Errors\n${errors}`, emoji: true },
+                { type: 'plain_text', text: `🧪 Total tests\n${report.executed + report.skipped}`, emoji: true },
+                { type: 'plain_text', text: `⏱ Duration\n${formatDuration(report.durationSeconds)}`, emoji: true },
             ],
         });
     } else if (!reportError && layout === 'compact' && report.failed) {
@@ -343,16 +351,6 @@ function formatBlocks(report, metadata, reportError, secret = '', layout = 'dash
         });
     }
 
-    const branch = sanitizeText(metadata.branch, secret).slice(0, 300) || 'unknown';
-    const commit = sanitizeText(metadata.commit, secret).slice(0, 40) || 'unknown';
-    const context = [{ type: 'plain_text', text: `Branch: ${branch} · Commit: ${commit}` }];
-    if (metadata.eventName === 'workflow_dispatch') {
-        context.push({ type: 'plain_text', text: 'Manual run' });
-        const manualContext = sanitizeText(metadata.manualContext, secret).slice(0, 700);
-        if (manualContext) context.push({ type: 'plain_text', text: `Overrides: ${manualContext}` });
-    }
-    blocks.push({ type: 'context', elements: context });
-
     const failures = report ? report.failures : [];
     if (layout === 'dashboard' && failures.length) {
         blocks.push({ type: 'divider' });
@@ -366,12 +364,27 @@ function formatBlocks(report, metadata, reportError, secret = '', layout = 'dash
         for (const failure of failures.slice(0, MAX_FAILURES_IN_BLOCKS)) {
             const name = sanitizeText(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
             const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
+            const emoji = failure.kind === 'error' ? '🔥' : '❌';
             blocks.push({
                 type: 'section',
-                text: { type: 'plain_text', text: `${name}${detail ? `\n${detail}` : ''}` },
+                text: {
+                    type: 'plain_text',
+                    text: `${emoji} ${name}\n↳ ${detail || 'Reason unavailable in xUnit report.'}`,
+                    emoji: true,
+                },
             });
         }
     }
+
+    const branch = sanitizeText(metadata.branch, secret).slice(0, 300) || 'unknown';
+    const commit = sanitizeText(metadata.commit, secret).slice(0, 40) || 'unknown';
+    const context = [{ type: 'plain_text', text: `Branch: ${branch} · Commit: ${commit}` }];
+    if (metadata.eventName === 'workflow_dispatch') {
+        context.push({ type: 'plain_text', text: 'Manual run' });
+        const manualContext = sanitizeText(metadata.manualContext, secret).slice(0, 700);
+        if (manualContext) context.push({ type: 'plain_text', text: `Overrides: ${manualContext}` });
+    }
+    blocks.push({ type: 'context', elements: context });
 
     if (label) blocks.push({ type: 'context', elements: [{ type: 'plain_text', text: `Preview: ${label}` }] });
 
