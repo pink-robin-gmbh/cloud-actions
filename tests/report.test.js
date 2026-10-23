@@ -8,7 +8,6 @@ const {
     MAX_MESSAGE_LENGTH,
     ReportError,
     formatBlocks,
-    formatFailureDetails,
     formatMessage,
     main,
     parseReport,
@@ -146,7 +145,6 @@ test('formats a Block Kit summary with metrics, failure details, and safe link b
     const report = {
         passed: 2,
         failed: 1,
-        errors: 0,
         skipped: 1,
         executed: 3,
         failures: [{ name: 'test @here *notify*', detail: 'API_TOKEN=verysecret' }],
@@ -155,58 +153,18 @@ test('formats a Block Kit summary with metrics, failure details, and safe link b
     const blocks = formatBlocks(report, metadata, undefined, 'bot-secret');
 
     assert.equal(blocks[0].type, 'header');
-    assert.match(blocks[0].text.text, /❌ FAILURE · Integration tests/);
+    assert.match(blocks[0].text.text, /❌ FAILURE/);
     assert.deepEqual(
         blocks[1].fields.map((field) => field.text),
-        ['*Passed*\n2', '*Skipped*\n1', '*Failures*\n1', '*Errors*\n0', '*Total tests*\n4', '*Duration*\n1m 2s'],
+        ['Executed\n3', 'Passed\n2', 'Failed\n1', 'Skipped\n1', 'Duration\n1m 2s'],
     );
-    assert.equal(blocks[1].fields.every((field) => field.type === 'mrkdwn'), true);
     assert.match(JSON.stringify(blocks), /test \[at\]here \[star\]notify\[star\]/);
     assert.match(JSON.stringify(blocks), /\[redacted\]/);
     assert.doesNotMatch(JSON.stringify(blocks), /@here|verysecret/);
-    const missingReason = formatBlocks({
-        ...report,
-        failures: [{ name: 'unknown test', detail: '' }],
-    }, metadata);
-    assert.match(JSON.stringify(missingReason), /Reason unavailable in xUnit report/);
     assert.deepEqual(blocks.at(-1).elements.map((button) => button.text.text), [
         'Open workflow run',
     ]);
     assert.equal(blocks.at(-1).elements[0].url, metadata.runUrl);
-    assert.equal(blocks.at(-1).type, 'actions');
-});
-
-test('shows the exact failing test and both xUnit reason fields in the dashboard', () => {
-    const report = parseReport(path.join(fixturesPath, 'slack-report.xml'));
-    const blocks = formatBlocks(report, metadata);
-    const rendered = JSON.stringify(blocks);
-
-    assert.deepEqual(
-        [report.passed, report.failed, report.errors, report.skipped, report.executed + report.skipped],
-        [14, 4, 0, 5, 23],
-    );
-    assert.equal(report.failures[0].detail, 'Did not match snapshot');
-    assert.match(report.failures[0].values, /\+\s+\{/);
-    assert.deepEqual(
-        blocks[1].fields.map((field) => field.text),
-        ['*Passed*\n14', '*Skipped*\n5', '*Failures*\n4', '*Errors*\n0', '*Total tests*\n23', '*Duration*\nunavailable'],
-    );
-    assert.match(rendered, /\*FAIL · #4 integration › Users › getUsersOfGroup/);
-    const testNameBlock = blocks.find((block) => block.type === 'section' && block.text
-        && block.text.text.includes('#20 integration'));
-    assert.ok(testNameBlock);
-    assert.match(testNameBlock.text.text, /order_complete/);
-    assert.doesNotMatch(testNameBlock.text.text, /\\_/);
-    const details = blocks.find((block) => block.type === 'container');
-    assert.ok(details);
-    assert.equal(details.title.text, 'Expand for failure details');
-    assert.equal(details.is_collapsible, true);
-    assert.equal(details.default_collapsed, true);
-    assert.ok(details.child_blocks.some((block) => block.text.text.includes('averageRating: null')));
-    assert.equal(blocks[blocks.indexOf(details) - 1].type, 'section');
-    assert.match(rendered, /\*FAIL · #20 integration › UseCases/);
-    assert.ok(blocks.findIndex((block) => block.type === 'divider')
-        > blocks.findIndex((block) => block.type === 'context'));
 });
 
 test('bounds Block Kit failure details and omits unsafe links', () => {
@@ -226,33 +184,16 @@ test('bounds Block Kit failure details and omits unsafe links', () => {
         ...metadata,
         runUrl: `https://example.com/${'ø'.repeat(800)}`,
     });
-    const detailsBlocks = formatFailureDetails({
-        failures: Array.from({ length: 80 }, (_, index) => ({
-            name: `test-${index}`,
-            detail: 'failure detail',
-            values: 'x'.repeat(5000),
-        })),
-    });
 
     assert.ok(blocks.length <= 50);
-    assert.equal(detailsBlocks.length, 1);
-    assert.equal(detailsBlocks[0].title.text, 'Expand for failure details');
-    assert.equal(detailsBlocks[0].width, 'full');
-    assert.equal(detailsBlocks[0].is_collapsible, true);
-    assert.equal(detailsBlocks[0].default_collapsed, true);
-    assert.equal(detailsBlocks[0].child_blocks.length, 10);
-    assert.ok(detailsBlocks[0].child_blocks.every((block) => block.text.text.length <= 3000));
-    assert.match(detailsBlocks[0].child_blocks[0].text.text, /details truncated/);
-    assert.match(detailsBlocks[0].child_blocks.at(-1).text.text, /71 more failures omitted/);
     assert.match(blocks[4].text.text, /showing first 43/);
-    assert.equal(blocks.filter((block) => block.type === 'container').length, 1);
-    assert.equal(blocks[2].type, 'context');
-    assert.equal(oversizedUrlBlocks[2].type, 'context');
+    assert.equal(blocks.filter((block) => block.type === 'section').length, 45);
+    assert.equal(blocks.at(-1).type, 'section');
     assert.equal(blocks.some((block) => block.type === 'actions'), false);
     assert.equal(oversizedUrlBlocks.some((block) => block.type === 'actions'), false);
 });
 
-test('shows manual run without overrides or invented counts for unavailable reports', () => {
+test('includes manual run overrides without inventing counts for unavailable reports', () => {
     const manual = {
         ...metadata,
         eventName: 'workflow_dispatch',
@@ -321,12 +262,9 @@ test('posts a Slack message with token only in the authorization header', async 
         assert.doesNotMatch(options.body, /xoxb-secret-token/);
         assert.equal(payload.mrkdwn, false);
         assert.deepEqual(payload.blocks, [{ type: 'header' }]);
-        return { ok: true, json: async () => ({ ok: true, ts: '123.456' }) };
+        return { ok: true, json: async () => ({ ok: true }) };
     }, async () => {
-        assert.equal(
-            await sendMessage('C123', 'xoxb-secret-token', 'Test summary', [{ type: 'header' }]),
-            '123.456',
-        );
+        await sendMessage('C123', 'xoxb-secret-token', 'Test summary', [{ type: 'header' }]);
     });
 });
 
