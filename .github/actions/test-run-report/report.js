@@ -61,44 +61,6 @@ function scalarText(value) {
     if (!value || typeof value !== 'object') return '';
     const message = String(value['@_message'] || '').trim();
     const lines = String(value['#text'] || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    const field = (name) => {
-        const line = lines.find((entry) => new RegExp(`^${name}:\\s*`, 'i').test(entry));
-        return line ? line.replace(new RegExp(`^${name}:\\s*`, 'i'), '') : '';
-    };
-    const reportMessage = message || field('message');
-    if (reportMessage) {
-        const details = [];
-        const body = lines.find((line) => !/^(?:---|\.\.\.|name:|message:|assertion:|at:|values:)/i.test(line));
-        const assertion = field('assertion');
-        const location = field('at');
-        if (body && body !== reportMessage) details.push(body);
-        if (assertion) details.push(`assertion: ${assertion}`);
-        if (location) details.push(`at ${location}`);
-
-        const values = field('values');
-        if (values) {
-            try {
-                const difference = JSON.parse(values)['Difference:'];
-                if (typeof difference === 'string') {
-                    const changes = { added: new Set(), removed: new Set() };
-                    for (const line of difference.split(/\r?\n/)) {
-                        const change = line.match(/^\s*([+-])\s*([A-Za-z_$][\w$-]*):/);
-                        if (change) changes[change[1] === '+' ? 'added' : 'removed'].add(change[2]);
-                    }
-                    for (const [kind, keys] of Object.entries(changes)) {
-                        if (keys.size) {
-                            const fields = [...keys];
-                            details.push(`${kind} fields: ${fields.slice(0, 3).join(', ')}`
-                                + (fields.length > 3 ? ` (+${fields.length - 3} more)` : ''));
-                        }
-                    }
-                }
-            } catch {
-                // Ignore non-JSON values; the full report artifact retains the original detail.
-            }
-        }
-        return [reportMessage, ...details].join(' — ');
-    }
     const body = lines.find((line) => /^message:\s*/i.test(line))
         || lines.find((line) => !/^(?:---|\.\.\.|name:|assertion:|values:)/i.test(line))
         || '';
@@ -208,7 +170,14 @@ function sanitizeText(value, secret = '') {
     let text = String(value || '');
     if (secret) text = text.split(secret).join('[redacted]');
     for (const pattern of CREDENTIAL_PATTERNS) text = text.replace(pattern, '[redacted]');
-    return text.replace(/\s+/g, ' ');
+    return text.replace(/\s+/g, ' ')
+        .replace(/@/g, '[at]')
+        .replace(/</g, '[lt]')
+        .replace(/>/g, '[gt]')
+        .replace(/\*/g, '[star]')
+        .replace(/_/g, '[underscore]')
+        .replace(/`/g, "'")
+        .replace(/~/g, '-');
 }
 
 function sanitizeUrl(value, secret = '') {
@@ -238,6 +207,8 @@ function metadataLines(metadata, secret) {
     ];
     if (metadata.eventName === 'workflow_dispatch') {
         lines.push('Manual run');
+        const manualContext = sanitizeText(metadata.manualContext, secret).slice(0, 700);
+        if (manualContext) lines.push(`Overrides: ${manualContext}`);
     }
     return lines;
 }
@@ -342,14 +313,6 @@ function formatBlocks(report, metadata, reportError, secret = '') {
         });
     }
 
-    const branch = sanitizeText(metadata.branch, secret).slice(0, 300) || 'unknown';
-    const commit = sanitizeText(metadata.commit, secret).slice(0, 40) || 'unknown';
-    const context = [{ type: 'plain_text', text: `Branch: ${branch} · Commit: ${commit}` }];
-    if (metadata.eventName === 'workflow_dispatch') {
-        context.push({ type: 'plain_text', text: 'Manual run' });
-    }
-    blocks.push({ type: 'context', elements: context });
-
     const failures = report ? report.failures : [];
     if (failures.length) {
         blocks.push({ type: 'divider' });
@@ -367,12 +330,22 @@ function formatBlocks(report, metadata, reportError, secret = '') {
             blocks.push({
                 type: 'section',
                 text: {
-                    type: 'plain_text',
-                    text: `${kind} · ${name}\n${detail || 'Reason unavailable in xUnit report.'}`,
+                    type: 'mrkdwn',
+                    text: `*${kind} · ${name}*\n> ${detail || 'Reason unavailable in xUnit report.'}`,
                 },
             });
         }
     }
+
+    const branch = sanitizeText(metadata.branch, secret).slice(0, 300) || 'unknown';
+    const commit = sanitizeText(metadata.commit, secret).slice(0, 40) || 'unknown';
+    const context = [{ type: 'plain_text', text: `Branch: ${branch} · Commit: ${commit}` }];
+    if (metadata.eventName === 'workflow_dispatch') {
+        context.push({ type: 'plain_text', text: 'Manual run' });
+        const manualContext = sanitizeText(metadata.manualContext, secret).slice(0, 700);
+        if (manualContext) context.push({ type: 'plain_text', text: `Overrides: ${manualContext}` });
+    }
+    blocks.push({ type: 'context', elements: context });
 
     const buttons = [];
     const runUrl = blockLink(metadata.runUrl, secret);
@@ -398,7 +371,7 @@ function formatBlocks(report, metadata, reportError, secret = '') {
     return blocks;
 }
 
-async function sendMessage(channel, token, message, blocks, color) {
+async function sendMessage(channel, token, message, blocks) {
     if (!channel) throw new Error('Slack channel ID is not configured');
     if (!token) throw new Error('Slack bot token is not configured');
 
@@ -414,9 +387,7 @@ async function sendMessage(channel, token, message, blocks, color) {
                 channel,
                 text: message,
                 mrkdwn: false,
-                ...(blocks ? (color
-                    ? { attachments: [{ color, blocks }] }
-                    : { blocks }) : {}),
+                ...(blocks ? { blocks } : {}),
             }),
             signal: AbortSignal.timeout(20000),
         });
@@ -468,23 +439,17 @@ async function main(environment = process.env) {
         branch: environment.BRANCH,
         commit: environment.COMMIT,
         eventName: environment.EVENT_NAME,
+        manualContext: environment.MANUAL_CONTEXT,
         runUrl: environment.RUN_URL,
         artifactUrl: environment.ARTIFACT_URL,
         testOutcome: environment.TEST_OUTCOME,
     };
     const message = formatMessage(report, metadata, reportError, token);
     const blocks = formatBlocks(report, metadata, reportError, token);
-    const color = reportError
-        ? 'warning'
-        : report && report.failed
-            ? 'danger'
-            : String(metadata.testOutcome || '').toLowerCase() === 'success'
-                ? 'good'
-                : 'warning';
     const errors = [];
     if (reportError) errors.push(reportError);
     try {
-        await sendMessage(environment.SLACK_CHANNEL_ID || '', token, message, blocks, color);
+        await sendMessage(environment.SLACK_CHANNEL_ID || '', token, message, blocks);
     } catch (error) {
         errors.push(error.message);
     }
