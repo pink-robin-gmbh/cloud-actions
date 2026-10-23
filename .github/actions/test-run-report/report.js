@@ -6,7 +6,7 @@ const MAX_FAILURE_DETAIL_LENGTH = 900;
 const MAX_FAILURE_VALUES_LENGTH = 2400;
 const MAX_FAILURE_NAME_LENGTH = 180;
 const MAX_FAILURES_IN_BLOCKS = 43;
-const MAX_FAILURES_IN_THREAD = 24;
+const MAX_FAILURES_IN_DETAILS = 24;
 
 const CREDENTIAL_PATTERNS = [
     /\b[A-Z0-9_-]*(?:AUTHORIZATION|PASSWORD|PASSWD|SECRET|TOKEN|API[_-]?KEY|CLIENT[_-]?SECRET)[A-Z0-9_-]*\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^,\s"'<>]+)/gi,
@@ -304,7 +304,7 @@ function blockLink(value, secret) {
     }
 }
 
-function formatBlocks(report, metadata, reportError, secret = '') {
+function formatBlocks(report, metadata, reportError, secret = '', options = {}) {
     let outcome = sanitizeText(metadata.testOutcome, secret).toUpperCase() || 'UNKNOWN';
     if (report && report.failed) outcome = 'FAILURE';
     let status = outcome;
@@ -320,6 +320,12 @@ function formatBlocks(report, metadata, reportError, secret = '') {
             emoji: true,
         },
     }];
+    if (options.comparisonLabel) {
+        blocks.push({
+            type: 'section',
+            text: { type: 'mrkdwn', text: `*${options.comparisonLabel}*` },
+        });
+    }
 
     if (reportError) {
         blocks.push({
@@ -360,7 +366,14 @@ function formatBlocks(report, metadata, reportError, secret = '') {
         blockLink(metadata.runUrl, secret) || blockLink(metadata.artifactUrl, secret),
     );
     if (failures.length) {
-        const availableSlots = 50 - blocks.length - 2 - (hasActions ? 1 : 0);
+        const detailSlots = options.includeFailureDetails
+            ? 2 + Math.min(MAX_FAILURES_IN_DETAILS, failures.length)
+                + (failures.length > MAX_FAILURES_IN_DETAILS ? 1 : 0)
+            : 0;
+        const availableSlots = Math.max(
+            0,
+            50 - blocks.length - 2 - (hasActions ? 2 : 0) - detailSlots,
+        );
         const displayedFailures = failures.slice(0, Math.min(MAX_FAILURES_IN_BLOCKS, availableSlots));
         blocks.push({ type: 'divider' });
         const more = displayedFailures.length < failures.length
@@ -383,6 +396,14 @@ function formatBlocks(report, metadata, reportError, secret = '') {
                 },
             });
         }
+        if (options.includeFailureDetails) {
+            blocks.push({ type: 'divider' });
+            blocks.push({
+                type: 'section',
+                text: { type: 'mrkdwn', text: `*Failure details (${failures.length})*` },
+            });
+            blocks.push(...formatFailureDetails(report, secret));
+        }
     }
 
     const buttons = [];
@@ -404,7 +425,10 @@ function formatBlocks(report, metadata, reportError, secret = '') {
             url: artifactUrl,
         });
     }
-    if (buttons.length) blocks.push({ type: 'actions', elements: buttons });
+    if (buttons.length) {
+        blocks.push({ type: 'divider' });
+        blocks.push({ type: 'actions', elements: buttons });
+    }
 
     return blocks;
 }
@@ -413,7 +437,7 @@ function formatFailureDetails(report, secret = '') {
     const failures = report ? report.failures : [];
     if (!failures.length) return [];
 
-    const displayedFailures = failures.slice(0, MAX_FAILURES_IN_THREAD);
+    const displayedFailures = failures.slice(0, MAX_FAILURES_IN_DETAILS);
     const blocks = [];
     for (const failure of displayedFailures) {
         const name = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH)
@@ -422,8 +446,8 @@ function formatFailureDetails(report, secret = '') {
         const childBlocks = [{
             type: 'section',
             text: {
-                type: 'plain_text',
-                text: `${name}\n${detail || 'Reason unavailable in xUnit report.'}`,
+                type: 'mrkdwn',
+                text: `*${name}*\n*${detail || 'Reason unavailable in xUnit report.'}*`,
             },
         }];
         if (failure.values) {
@@ -540,25 +564,57 @@ async function main(environment = process.env) {
     const failureDetails = formatFailureDetails(report, token);
     const errors = [];
     if (reportError) errors.push(reportError);
-    try {
-        const parentTs = await sendMessage(
-            environment.SLACK_CHANNEL_ID || '',
-            token,
-            message,
-            blocks,
-        );
-        if (failureDetails.length) {
-            if (!parentTs) throw new Error('Slack did not return the parent message timestamp');
+    if (failureDetails.length) {
+        const versions = [
+            {
+                label: 'Version 1 · Failure details in thread',
+                blocks: formatBlocks(report, metadata, reportError, token, {
+                    comparisonLabel: 'Version 1 · Failure details in thread',
+                }),
+                inThread: true,
+            },
+            {
+                label: 'Version 2 · Failure details in message',
+                blocks: formatBlocks(report, metadata, reportError, token, {
+                    comparisonLabel: 'Version 2 · Failure details in message',
+                    includeFailureDetails: true,
+                }),
+                inThread: false,
+            },
+        ];
+        for (const version of versions) {
+            try {
+                const parentTs = await sendMessage(
+                    environment.SLACK_CHANNEL_ID || '',
+                    token,
+                    `${version.label}\n\n${message}`,
+                    version.blocks,
+                );
+                if (version.inThread) {
+                    if (!parentTs) throw new Error('Slack did not return the parent message timestamp');
+                    await sendMessage(
+                        environment.SLACK_CHANNEL_ID || '',
+                        token,
+                        `Failure details for ${sanitizeText(metadata.workflow, token).slice(0, 300) || 'Test run'}`,
+                        failureDetails,
+                        parentTs,
+                    );
+                }
+            } catch (error) {
+                errors.push(`${version.label}: ${error.message}`);
+            }
+        }
+    } else {
+        try {
             await sendMessage(
                 environment.SLACK_CHANNEL_ID || '',
                 token,
-                `Failure details for ${sanitizeText(metadata.workflow, token).slice(0, 300) || 'Test run'}`,
-                failureDetails,
-                parentTs,
+                message,
+                blocks,
             );
+        } catch (error) {
+            errors.push(error.message);
         }
-    } catch (error) {
-        errors.push(error.message);
     }
 
     if (errors.length) {
