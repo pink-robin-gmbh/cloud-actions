@@ -7,6 +7,7 @@ const test = require('node:test');
 const {
     MAX_MESSAGE_LENGTH,
     ReportError,
+    formatBlocks,
     formatMessage,
     main,
     parseReport,
@@ -128,6 +129,58 @@ test('formats a compact success summary with duration and run link', () => {
     assert.match(message, new RegExp(metadata.runUrl));
 });
 
+test('formats a Block Kit summary with metrics, failure details, and safe link buttons', () => {
+    const report = {
+        passed: 2,
+        failed: 1,
+        skipped: 1,
+        executed: 3,
+        failures: [{ name: 'test @here *notify*', detail: 'API_TOKEN=verysecret' }],
+        durationSeconds: 62,
+    };
+    const blocks = formatBlocks(report, metadata, undefined, 'bot-secret');
+
+    assert.equal(blocks[0].type, 'header');
+    assert.match(blocks[0].text.text, /❌ FAILURE/);
+    assert.deepEqual(
+        blocks[1].fields.map((field) => field.text),
+        ['Executed\n3', 'Passed\n2', 'Failed\n1', 'Skipped\n1', 'Duration\n1m 2s'],
+    );
+    assert.match(JSON.stringify(blocks), /test \[at\]here \[star\]notify\[star\]/);
+    assert.match(JSON.stringify(blocks), /\[redacted\]/);
+    assert.doesNotMatch(JSON.stringify(blocks), /@here|verysecret/);
+    assert.deepEqual(blocks.at(-1).elements.map((button) => button.text.text), [
+        'Open workflow run',
+    ]);
+    assert.equal(blocks.at(-1).elements[0].url, metadata.runUrl);
+});
+
+test('bounds Block Kit failure details and omits unsafe links', () => {
+    const report = {
+        passed: 0,
+        failed: 80,
+        skipped: 0,
+        executed: 80,
+        failures: Array.from({ length: 80 }, (_, index) => ({
+            name: `test-${index}`,
+            detail: 'failure detail',
+        })),
+        durationSeconds: 30,
+    };
+    const blocks = formatBlocks(report, { ...metadata, runUrl: 'javascript:alert(1)' });
+    const oversizedUrlBlocks = formatBlocks(report, {
+        ...metadata,
+        runUrl: `https://example.com/${'ø'.repeat(800)}`,
+    });
+
+    assert.ok(blocks.length <= 50);
+    assert.match(blocks[4].text.text, /showing first 43/);
+    assert.equal(blocks.filter((block) => block.type === 'section').length, 45);
+    assert.equal(blocks.at(-1).type, 'section');
+    assert.equal(blocks.some((block) => block.type === 'actions'), false);
+    assert.equal(oversizedUrlBlocks.some((block) => block.type === 'actions'), false);
+});
+
 test('includes manual run overrides without inventing counts for unavailable reports', () => {
     const manual = {
         ...metadata,
@@ -187,11 +240,13 @@ test('posts a Slack message with token only in the authorization header', async 
         assert.equal(options.headers.Authorization, 'Bearer xoxb-secret-token');
         assert.equal(options.headers['Content-Type'], 'application/json; charset=utf-8');
         assert.equal(options.signal instanceof AbortSignal, true);
+        const payload = JSON.parse(options.body);
         assert.doesNotMatch(options.body, /xoxb-secret-token/);
-        assert.match(options.body, /"mrkdwn":false/);
+        assert.equal(payload.mrkdwn, false);
+        assert.deepEqual(payload.blocks, [{ type: 'header' }]);
         return { ok: true, json: async () => ({ ok: true }) };
     }, async () => {
-        await sendMessage('C123', 'xoxb-secret-token', 'Test summary');
+        await sendMessage('C123', 'xoxb-secret-token', 'Test summary', [{ type: 'header' }]);
     });
 });
 
@@ -225,7 +280,7 @@ test('posts an unavailable-report warning without fabricated counts', async () =
     console.log = (message) => logs.push(message);
     try {
         await withMockFetch(async (_url, options) => {
-            messages.push(JSON.parse(options.body).text);
+            messages.push(JSON.parse(options.body));
             return { ok: true, json: async () => ({ ok: true }) };
         }, async () => {
             const result = await main({
@@ -244,8 +299,9 @@ test('posts an unavailable-report warning without fabricated counts', async () =
     } finally {
         console.log = originalLog;
     }
-    assert.match(messages[0], /Test report unavailable: Test report is missing/);
-    assert.doesNotMatch(messages[0], /0 executed/);
+    assert.match(messages[0].text, /Test report unavailable: Test report is missing/);
+    assert.match(JSON.stringify(messages[0].blocks), /Test report unavailable: Test report is missing/);
+    assert.doesNotMatch(messages[0].text, /0 executed/);
     assert.ok(logs.some((line) => line.includes('::warning::Test report is missing')));
     assert.ok(logs.every((line) => !line.includes('bot-secret')));
 });

@@ -4,6 +4,7 @@ const { XMLParser, XMLValidator } = require('fast-xml-parser');
 const MAX_MESSAGE_LENGTH = 11000;
 const MAX_FAILURE_DETAIL_LENGTH = 320;
 const MAX_FAILURE_NAME_LENGTH = 180;
+const MAX_FAILURES_IN_BLOCKS = 43;
 
 const CREDENTIAL_PATTERNS = [
     /\b[A-Z0-9_-]*(?:AUTHORIZATION|PASSWORD|PASSWD|SECRET|TOKEN|API[_-]?KEY|CLIENT[_-]?SECRET)[A-Z0-9_-]*\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^,\s"'<>]+)/gi,
@@ -251,7 +252,104 @@ function formatMessage(report, metadata, reportError, secret = '') {
     return message.length > MAX_MESSAGE_LENGTH ? message.slice(0, MAX_MESSAGE_LENGTH) : message;
 }
 
-async function sendMessage(channel, token, message) {
+function blockLink(value, secret) {
+    const candidate = sanitizeUrl(value, secret);
+    if (!candidate) return '';
+    try {
+        const url = new URL(candidate);
+        if (url.protocol !== 'https:' || url.username || url.password) return '';
+        return url.href.length <= 1500 ? url.href : '';
+    } catch {
+        return '';
+    }
+}
+
+function formatBlocks(report, metadata, reportError, secret = '') {
+    let outcome = sanitizeText(metadata.testOutcome, secret).toUpperCase() || 'UNKNOWN';
+    if (report && report.failed) outcome = 'FAILURE';
+    const workflow = sanitizeText(metadata.workflow, secret).slice(0, 300) || 'Test run';
+    const emoji = outcome === 'SUCCESS' ? '✅' : outcome === 'FAILURE' ? '❌' : '⚪';
+    const blocks = [{
+        type: 'header',
+        text: { type: 'plain_text', text: `${emoji} ${outcome} · ${workflow}`.slice(0, 150), emoji: true },
+    }];
+
+    if (reportError) {
+        blocks.push({
+            type: 'section',
+            text: {
+                type: 'plain_text',
+                text: `Test report unavailable: ${sanitizeText(reportError, secret).slice(0, 400)}`,
+            },
+        });
+    } else {
+        blocks.push({
+            type: 'section',
+            fields: [
+                { type: 'plain_text', text: `Executed\n${report.executed}`, emoji: true },
+                { type: 'plain_text', text: `Passed\n${report.passed}`, emoji: true },
+                { type: 'plain_text', text: `Failed\n${report.failed}`, emoji: true },
+                { type: 'plain_text', text: `Skipped\n${report.skipped}`, emoji: true },
+                { type: 'plain_text', text: `Duration\n${formatDuration(report.durationSeconds)}`, emoji: true },
+            ],
+        });
+    }
+
+    const branch = sanitizeText(metadata.branch, secret).slice(0, 300) || 'unknown';
+    const commit = sanitizeText(metadata.commit, secret).slice(0, 40) || 'unknown';
+    const context = [{ type: 'plain_text', text: `Branch: ${branch} · Commit: ${commit}` }];
+    if (metadata.eventName === 'workflow_dispatch') {
+        context.push({ type: 'plain_text', text: 'Manual run' });
+        const manualContext = sanitizeText(metadata.manualContext, secret).slice(0, 700);
+        if (manualContext) context.push({ type: 'plain_text', text: `Overrides: ${manualContext}` });
+    }
+    blocks.push({ type: 'context', elements: context });
+
+    const failures = report ? report.failures : [];
+    if (failures.length) {
+        blocks.push({ type: 'divider' });
+        const more = failures.length > MAX_FAILURES_IN_BLOCKS
+            ? ` (showing first ${MAX_FAILURES_IN_BLOCKS})`
+            : '';
+        blocks.push({
+            type: 'section',
+            text: { type: 'plain_text', text: `Failures (${failures.length})${more}` },
+        });
+        for (const failure of failures.slice(0, MAX_FAILURES_IN_BLOCKS)) {
+            const name = sanitizeText(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
+            const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
+            blocks.push({
+                type: 'section',
+                text: { type: 'plain_text', text: `${name}${detail ? `\n${detail}` : ''}` },
+            });
+        }
+    }
+
+    const buttons = [];
+    const runUrl = blockLink(metadata.runUrl, secret);
+    const artifactUrl = blockLink(metadata.artifactUrl, secret);
+    if (runUrl) {
+        buttons.push({
+            type: 'button',
+            action_id: 'open_actions_run',
+            text: { type: 'plain_text', text: 'Open workflow run', emoji: true },
+            url: runUrl,
+        });
+    }
+    if (artifactUrl) {
+        buttons.push({
+            type: 'button',
+            action_id: 'open_test_artifact',
+            text: { type: 'plain_text', text: 'Open test artifact', emoji: true },
+            url: artifactUrl,
+        });
+    }
+    if (buttons.length) blocks.push({ type: 'actions', elements: buttons });
+
+    return blocks;
+}
+
+async function sendMessage(channel, token, message, blocks) {
     if (!channel) throw new Error('Slack channel ID is not configured');
     if (!token) throw new Error('Slack bot token is not configured');
 
@@ -263,7 +361,12 @@ async function sendMessage(channel, token, message) {
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json; charset=utf-8',
             },
-            body: JSON.stringify({ channel, text: message, mrkdwn: false }),
+            body: JSON.stringify({
+                channel,
+                text: message,
+                mrkdwn: false,
+                ...(blocks ? { blocks } : {}),
+            }),
             signal: AbortSignal.timeout(20000),
         });
     } catch {
@@ -320,10 +423,11 @@ async function main(environment = process.env) {
         testOutcome: environment.TEST_OUTCOME,
     };
     const message = formatMessage(report, metadata, reportError, token);
+    const blocks = formatBlocks(report, metadata, reportError, token);
     const errors = [];
     if (reportError) errors.push(reportError);
     try {
-        await sendMessage(environment.SLACK_CHANNEL_ID || '', token, message);
+        await sendMessage(environment.SLACK_CHANNEL_ID || '', token, message, blocks);
     } catch (error) {
         errors.push(error.message);
     }
@@ -339,6 +443,7 @@ module.exports = {
     MAX_MESSAGE_LENGTH,
     ReportError,
     formatMessage,
+    formatBlocks,
     main,
     parseReport,
     sendMessage,

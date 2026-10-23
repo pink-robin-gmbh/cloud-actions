@@ -16,7 +16,9 @@ This library contains shared workflows for projects managed and build by Pink Ro
 
 ## Slack test-run report action
 
-Parses an xUnit report and posts a summary to Slack. Set `SLACK_BOT_TOKEN`
+Parses an xUnit report and posts a Block Kit summary card with test metrics,
+failure details, and links to the workflow run and report artifact. A plain-text
+fallback is included for notifications. Set `SLACK_BOT_TOKEN`
 (with `chat:write` access) as a secret and `SLACK_CHANNEL_ID` as a repository
 variable.
 
