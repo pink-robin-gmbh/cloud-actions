@@ -183,14 +183,20 @@ test('shows the exact failing test and both xUnit reason fields in the dashboard
         [report.passed, report.failed, report.errors, report.skipped, report.executed + report.skipped],
         [594, 4, 0, 5, 603],
     );
+    assert.equal(report.failures[0].detail, 'Did not match snapshot');
+    assert.match(report.failures[0].values, /\+\s+\{/);
     assert.deepEqual(
         blocks[1].fields.map((field) => field.text),
         ['*Passed*\n594', '*Skipped*\n5', '*Failures*\n4', '*Errors*\n0', '*Total tests*\n603', '*Duration*\nunavailable'],
     );
     assert.match(rendered, /\*FAIL · #4 integration › Users › getUsersOfGroup/);
     assert.match(rendered, /> Did not match snapshot/);
-    assert.match(rendered, /Values: Difference: \+ averageRating: null; \+ companyName: 'Smart Services Partner'/);
-    assert.match(rendered, /more changes/);
+    const valuesBlock = blocks.find((block) => block.type === 'section'
+        && block.text && block.text.text.startsWith('*Values*'));
+    assert.ok(valuesBlock);
+    assert.match(valuesBlock.text.text, /```[\s\S]*\+\s+\{/);
+    assert.match(valuesBlock.text.text, /averageRating: null/);
+    assert.doesNotMatch(blocks[5].text.text, /Values/);
     assert.match(rendered, /\*FAIL · #20 integration › UseCases/);
     assert.ok(blocks.findIndex((block) => block.type === 'divider')
         > blocks.findIndex((block) => block.type === 'context'));
@@ -213,8 +219,14 @@ test('bounds Block Kit failure details and omits unsafe links', () => {
         ...metadata,
         runUrl: `https://example.com/${'ø'.repeat(800)}`,
     });
+    const valuesBlocks = formatBlocks({
+        ...report,
+        failures: report.failures.map((failure) => ({ ...failure, values: 'expected\\n- old\\n+ new' })),
+    }, metadata);
 
     assert.ok(blocks.length <= 50);
+    assert.ok(valuesBlocks.length <= 50);
+    assert.match(valuesBlocks[4].text.text, /showing first 22/);
     assert.match(blocks[4].text.text, /showing first 43/);
     assert.equal(blocks.filter((block) => block.type === 'section').length, 45);
     assert.equal(blocks[2].type, 'context');
