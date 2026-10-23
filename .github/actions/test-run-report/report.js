@@ -290,23 +290,19 @@ function blockLink(value, secret) {
 function formatBlocks(report, metadata, reportError, secret = '') {
     let outcome = sanitizeText(metadata.testOutcome, secret).toUpperCase() || 'UNKNOWN';
     if (report && report.failed) outcome = 'FAILURE';
+    let status = outcome;
+    if (reportError) status = '⚠️ REPORT UNAVAILABLE';
+    else if (outcome === 'SUCCESS') status = '✅ SUCCESS';
+    else if (outcome === 'FAILURE') status = '❌ FAILURE';
     const workflow = sanitizeText(metadata.workflow, secret).slice(0, 300) || 'Test run';
     const blocks = [{
         type: 'header',
         text: {
             type: 'plain_text',
-            text: `${outcome} · ${workflow}`.slice(0, 150),
+            text: `${status} · ${workflow}`.slice(0, 150),
             emoji: true,
         },
     }];
-
-    const branch = sanitizeText(metadata.branch, secret).slice(0, 300) || 'unknown';
-    const commit = sanitizeText(metadata.commit, secret).slice(0, 40) || 'unknown';
-    const context = [{ type: 'plain_text', text: `Branch: ${branch} · Commit: ${commit}` }];
-    if (metadata.eventName === 'workflow_dispatch') {
-        context.push({ type: 'plain_text', text: 'Manual run' });
-    }
-    blocks.push({ type: 'context', elements: context });
 
     if (reportError) {
         blocks.push({
@@ -333,6 +329,14 @@ function formatBlocks(report, metadata, reportError, secret = '') {
             fields: metrics.map(([name, value]) => ({ type: 'mrkdwn', text: `*${name}*\n${value}` })),
         });
     }
+
+    const branch = sanitizeText(metadata.branch, secret).slice(0, 300) || 'unknown';
+    const commit = sanitizeText(metadata.commit, secret).slice(0, 40) || 'unknown';
+    const context = [{ type: 'plain_text', text: `Branch: ${branch} · Commit: ${commit}` }];
+    if (metadata.eventName === 'workflow_dispatch') {
+        context.push({ type: 'plain_text', text: 'Manual run' });
+    }
+    blocks.push({ type: 'context', elements: context });
 
     const failures = report ? report.failures : [];
     if (failures.length) {
