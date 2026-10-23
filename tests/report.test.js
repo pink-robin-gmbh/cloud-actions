@@ -7,6 +7,8 @@ const test = require('node:test');
 const {
     MAX_MESSAGE_LENGTH,
     ReportError,
+    formatBlocks,
+    formatFailureDetails,
     formatMessage,
     main,
     parseReport,
@@ -50,7 +52,10 @@ test('normalizes integration testsuites by case without aggregate double countin
         [report.passed, report.failed, report.skipped, report.executed],
         [1, 2, 1, 3],
     );
+    assert.equal(report.errors, 1);
     assert.equal(report.failures.length, 2);
+    assert.deepEqual(report.failures.map(({ kind }) => kind), ['failure', 'error']);
+    assert.match(report.failures[0].detail, /expected 400, got 500 — assertion detail/);
     assert.equal(report.durationSeconds, null);
 });
 
@@ -125,21 +130,146 @@ test('formats a compact success summary with duration and run link', () => {
     assert.match(message, /SUCCESS - Integration tests/);
     assert.match(message, /5 executed \(5 passed, 0 failed\); 2 skipped/);
     assert.match(message, /Test duration: 1m 2s/);
+    assert.match(message, /Commit: 01234567/);
     assert.match(message, new RegExp(metadata.runUrl));
+    assert.match(formatBlocks({
+        passed: 5,
+        failed: 0,
+        skipped: 2,
+        executed: 5,
+        failures: [],
+        durationSeconds: 62,
+    }, metadata)[0].text.text, /✅ SUCCESS · Integration tests/);
 });
 
-test('includes manual run overrides without inventing counts for unavailable reports', () => {
+test('formats a Block Kit summary with metrics, failure details, and safe link buttons', () => {
+    const report = {
+        passed: 2,
+        failed: 1,
+        errors: 0,
+        skipped: 1,
+        executed: 3,
+        failures: [{ name: 'test @here *notify*', detail: 'API_TOKEN=verysecret' }],
+        durationSeconds: 62,
+    };
+    const blocks = formatBlocks(report, metadata, undefined, 'bot-secret');
+
+    assert.equal(blocks[0].type, 'header');
+    assert.match(blocks[0].text.text, /❌ FAILURE · Integration tests/);
+    assert.deepEqual(
+        blocks[1].fields.map((field) => field.text),
+        ['*Passed*\n2', '*Skipped*\n1', '*Failures*\n1', '*Errors*\n0', '*Total tests*\n4', '*Duration*\n1m 2s'],
+    );
+    assert.equal(blocks[1].fields.every((field) => field.type === 'mrkdwn'), true);
+    assert.match(JSON.stringify(blocks), /test \[at\]here \[star\]notify\[star\]/);
+    assert.match(JSON.stringify(blocks), /\[redacted\]/);
+    assert.doesNotMatch(JSON.stringify(blocks), /@here|verysecret/);
+    const missingReason = formatBlocks({
+        ...report,
+        failures: [{ name: 'unknown test', detail: '' }],
+    }, metadata);
+    assert.match(JSON.stringify(missingReason), /Reason unavailable in xUnit report/);
+    assert.deepEqual(blocks.at(-1).elements.map((button) => button.text.text), [
+        'Open workflow run',
+    ]);
+    assert.equal(blocks.at(-1).elements[0].url, metadata.runUrl);
+    assert.equal(blocks.at(-1).type, 'actions');
+});
+
+test('shows the exact failing test and both xUnit reason fields in the dashboard', () => {
+    const report = parseReport(path.join(fixturesPath, 'slack-report.xml'));
+    const blocks = formatBlocks(report, metadata);
+    const rendered = JSON.stringify(blocks);
+
+    assert.deepEqual(
+        [report.passed, report.failed, report.errors, report.skipped, report.executed + report.skipped],
+        [14, 4, 0, 5, 23],
+    );
+    assert.equal(report.failures[0].detail, 'Did not match snapshot');
+    assert.match(report.failures[0].values, /\+\s+\{/);
+    assert.deepEqual(
+        blocks[1].fields.map((field) => field.text),
+        ['*Passed*\n14', '*Skipped*\n5', '*Failures*\n4', '*Errors*\n0', '*Total tests*\n23', '*Duration*\nunavailable'],
+    );
+    assert.match(rendered, /\*FAIL · #4 integration › Users › getUsersOfGroup/);
+    const testNameBlock = blocks.find((block) => block.type === 'section' && block.text
+        && block.text.text.includes('#20 integration'));
+    assert.ok(testNameBlock);
+    assert.match(testNameBlock.text.text, /order_complete/);
+    assert.doesNotMatch(testNameBlock.text.text, /\\_/);
+    const details = blocks.find((block) => block.type === 'container');
+    assert.ok(details);
+    assert.equal(details.title.text, 'Expand for failure details');
+    assert.equal(details.is_collapsible, true);
+    assert.equal(details.default_collapsed, true);
+    assert.ok(details.child_blocks.some((block) => block.text.text.includes('averageRating: null')));
+    assert.equal(blocks[blocks.indexOf(details) - 1].type, 'section');
+    assert.match(rendered, /\*FAIL · #20 integration › UseCases/);
+    assert.ok(blocks.findIndex((block) => block.type === 'divider')
+        > blocks.findIndex((block) => block.type === 'context'));
+});
+
+test('bounds Block Kit failure details and omits unsafe links', () => {
+    const report = {
+        passed: 0,
+        failed: 80,
+        skipped: 0,
+        executed: 80,
+        failures: Array.from({ length: 80 }, (_, index) => ({
+            name: `test-${index}`,
+            detail: 'failure detail',
+        })),
+        durationSeconds: 30,
+    };
+    const blocks = formatBlocks(report, { ...metadata, runUrl: 'javascript:alert(1)' });
+    const oversizedUrlBlocks = formatBlocks(report, {
+        ...metadata,
+        runUrl: `https://example.com/${'ø'.repeat(800)}`,
+    });
+    const detailsBlocks = formatFailureDetails({
+        failures: Array.from({ length: 80 }, (_, index) => ({
+            name: `test-${index}`,
+            detail: 'failure detail',
+            values: 'x'.repeat(5000),
+        })),
+    });
+
+    assert.ok(blocks.length <= 50);
+    assert.equal(detailsBlocks.length, 1);
+    assert.equal(detailsBlocks[0].title.text, 'Expand for failure details');
+    assert.equal(detailsBlocks[0].width, 'full');
+    assert.equal(detailsBlocks[0].is_collapsible, true);
+    assert.equal(detailsBlocks[0].default_collapsed, true);
+    assert.equal(detailsBlocks[0].child_blocks.length, 10);
+    assert.ok(detailsBlocks[0].child_blocks.every((block) => block.text.text.length <= 3000));
+    assert.match(detailsBlocks[0].child_blocks[0].text.text, /details truncated/);
+    assert.match(detailsBlocks[0].child_blocks.at(-1).text.text, /71 more failures omitted/);
+    assert.match(blocks[4].text.text, /showing first 43/);
+    assert.equal(blocks.filter((block) => block.type === 'container').length, 1);
+    assert.equal(blocks[2].type, 'context');
+    assert.equal(oversizedUrlBlocks[2].type, 'context');
+    assert.equal(blocks.some((block) => block.type === 'actions'), false);
+    assert.equal(oversizedUrlBlocks.some((block) => block.type === 'actions'), false);
+});
+
+test('shows manual run without overrides or invented counts for unavailable reports', () => {
     const manual = {
         ...metadata,
         eventName: 'workflow_dispatch',
         manualContext: 'VersionCore=develop; SkipDeploy=true',
     };
     const message = formatMessage(null, manual, 'report missing');
+    const blocks = formatBlocks(null, manual, 'report missing');
 
     assert.match(message, /Manual run/);
-    assert.match(message, /VersionCore=develop; SkipDeploy=true/);
+    assert.doesNotMatch(message, /Overrides:|VersionCore=develop|SkipDeploy=true/);
     assert.match(message, /Test report unavailable: report missing/);
     assert.doesNotMatch(message, /0 executed/);
+    assert.match(JSON.stringify(blocks), /Manual run/);
+    assert.doesNotMatch(JSON.stringify(blocks), /Overrides:|VersionCore=develop|SkipDeploy=true/);
+    assert.match(blocks[0].text.text, /⚠️ REPORT UNAVAILABLE · Integration tests/);
+    assert.equal(blocks[2].type, 'context');
+    assert.equal(blocks[1].type, 'section');
 });
 
 test('sanitizes mentions, formatting, and credential-like failure details', () => {
@@ -187,11 +317,16 @@ test('posts a Slack message with token only in the authorization header', async 
         assert.equal(options.headers.Authorization, 'Bearer xoxb-secret-token');
         assert.equal(options.headers['Content-Type'], 'application/json; charset=utf-8');
         assert.equal(options.signal instanceof AbortSignal, true);
+        const payload = JSON.parse(options.body);
         assert.doesNotMatch(options.body, /xoxb-secret-token/);
-        assert.match(options.body, /"mrkdwn":false/);
-        return { ok: true, json: async () => ({ ok: true }) };
+        assert.equal(payload.mrkdwn, false);
+        assert.deepEqual(payload.blocks, [{ type: 'header' }]);
+        return { ok: true, json: async () => ({ ok: true, ts: '123.456' }) };
     }, async () => {
-        await sendMessage('C123', 'xoxb-secret-token', 'Test summary');
+        assert.equal(
+            await sendMessage('C123', 'xoxb-secret-token', 'Test summary', [{ type: 'header' }]),
+            '123.456',
+        );
     });
 });
 
@@ -225,7 +360,7 @@ test('posts an unavailable-report warning without fabricated counts', async () =
     console.log = (message) => logs.push(message);
     try {
         await withMockFetch(async (_url, options) => {
-            messages.push(JSON.parse(options.body).text);
+            messages.push(JSON.parse(options.body));
             return { ok: true, json: async () => ({ ok: true }) };
         }, async () => {
             const result = await main({
@@ -244,10 +379,48 @@ test('posts an unavailable-report warning without fabricated counts', async () =
     } finally {
         console.log = originalLog;
     }
-    assert.match(messages[0], /Test report unavailable: Test report is missing/);
-    assert.doesNotMatch(messages[0], /0 executed/);
+    assert.match(messages[0].text, /Test report unavailable: Test report is missing/);
+    assert.match(JSON.stringify(messages[0].blocks), /Test report unavailable: Test report is missing/);
+    assert.doesNotMatch(messages[0].text, /0 executed/);
     assert.ok(logs.some((line) => line.includes('::warning::Test report is missing')));
     assert.ok(logs.every((line) => !line.includes('bot-secret')));
+});
+
+test('posts the summary with one collapsible box containing failure details', async () => {
+    const messages = [];
+    await withMockFetch(async (_url, options) => {
+        messages.push(JSON.parse(options.body));
+        return { ok: true, json: async () => ({ ok: true, ts: '123.456' }) };
+    }, async () => {
+        const result = await main({
+            REPORT_PATH: path.join(fixturesPath, 'slack-report.xml'),
+            TEST_OUTCOME: 'failure',
+            WORKFLOW: 'Integration tests',
+            BRANCH: 'main',
+            COMMIT: 'abc123',
+            EVENT_NAME: 'push',
+            RUN_URL: 'https://github.com/example/repo/actions/runs/42',
+            SLACK_CHANNEL_ID: 'C123',
+            SLACK_BOT_TOKEN: 'bot-secret',
+        });
+        assert.equal(result, 0);
+    });
+
+    assert.equal(messages.length, 1);
+    assert.match(messages[0].blocks[0].text.text, /FAILURE · Integration tests/);
+    assert.match(JSON.stringify(messages[0].blocks), /Failures \(4\)/);
+    const failureDetails = messages[0].blocks.find((block) => block.type === 'container');
+    assert.ok(failureDetails);
+    assert.equal(failureDetails.title.text, 'Expand for failure details');
+    assert.equal(failureDetails.is_collapsible && failureDetails.default_collapsed, true);
+    assert.ok(failureDetails.child_blocks.length <= 10);
+    const renderedDetails = JSON.stringify(failureDetails.child_blocks);
+    assert.match(renderedDetails, /#4 integration/);
+    assert.match(renderedDetails, /\*Did not match snapshot\*/);
+    assert.match(renderedDetails, /averageRating: null/);
+    assert.match(renderedDetails, /#20 integration/);
+    assert.equal(messages[0].blocks.at(-1).type, 'actions');
+    assert.equal(messages[0].thread_ts, undefined);
 });
 
 test('writes a sanitized warning when Slack rejects a valid report', async () => {

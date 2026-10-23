@@ -1,18 +1,122 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuites tests="5" failures="1" errors="1" skipped="1" time="42.7">
-  <testsuite name="orders" tests="3" failures="1" errors="0" skipped="0" time="28.4">
-    <testcase classname="integration.orders" name="creates order" time="10.2" />
-    <testcase classname="integration.orders" name="rejects invalid delivery date" time="8.1">
-      <failure message="expected HTTP 400, got 500">Expected validation error was not returned.</failure>
-    </testcase>
-    <testcase classname="integration.orders" name="retries a transient request" time="10.1" />
+<?xml version='1.0' encoding='utf-8'?>
+<testsuites>
+  <testsuite tests="1" failures="0" errors="0" name="integration › Users › getUsersOfGroup › /get users of group unauthorized">
+    <testcase name="#2 integration › Users › getUsersOfGroup › /get users of group unauthorized" />
   </testsuite>
-  <testsuite name="authentication" tests="2" failures="0" errors="1" skipped="1" time="14.3">
-    <testcase classname="integration.auth" name="rejects expired session" time="7.3">
-      <error message="request timed out">The response did not arrive within the test timeout.</error>
+  <testsuite tests="1" failures="0" errors="0" name="integration › Users › getUsersOfGroup › /get users of group with wrong parameter type">
+    <testcase name="#3 integration › Users › getUsersOfGroup › /get users of group with wrong parameter type" />
+  </testsuite>
+  <testsuite tests="1" failures="1" errors="0" name="integration › Users › getUsersOfGroup › /get users of group, no page and no page size">
+    <testcase name="#4 integration › Users › getUsersOfGroup › /get users of group, no page and no page size">
+      <failure>
+          ---
+            name: AssertionError
+            message: Did not match snapshot
+            assertion: snapshot
+            values: {"Difference:":"  {\n    data: [\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n      Object { … },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'Fahrer',\n+       groupAdmin: false,\n+       groupUsers: null,\n+       id: 80,\n+       lastName: 'Fahrer',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: true,\n+       firstName: 'Max',\n+       groupAdmin: false,\n+       groupUsers: null,\n+       id: 83,\n+       lastName: 'Mustermannter',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'Rene',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 90,\n+       lastName: 'Fellner',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'Nina',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 93,\n+       lastName: 'Hintner',\n+       title: 'Frau',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'Fahrer',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 95,\n+       lastName: 'Perus',\n+       title: 'Frau',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'Markus',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 97,\n+       lastName: 'Lugert',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'Claudia',\n+       groupAdmin: false,\n+       groupUsers: null,\n+       id: 98,\n+       lastName: 'Fahrer',\n+       title: 'Frau',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: true,\n+       firstName: 'Mario',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 102,\n+       lastName: 'Pichler',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'david',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 107,\n+       lastName: 'Partner',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'DavidG',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 115,\n+       lastName: 'Fahrer/Partner',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'Mario',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 118,\n+       lastName: 'Pichler',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'Nadine',\n+       groupAdmin: false,\n+       groupUsers: null,\n+       id: 123,\n+       lastName: 'Schöneberger',\n+       title: 'Frau',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'testfahrer',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 131,\n+       lastName: 'test',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'Max',\n+       groupAdmin: false,\n+       groupUsers: null,\n+       id: 137,\n+       lastName: 'Muster',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: true,\n+       firstName: 'Martin',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 1309,\n+       lastName: 'Trolf',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'Thomas',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 1317,\n+       lastName: 'D',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: true,\n+       firstName: 'Peter',\n+       groupAdmin: false,\n+       groupUsers: null,\n+       id: 1318,\n+       lastName: 'Test',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: true,\n+       firstName: 'ABer',\n+       groupAdmin: false,\n+       groupUsers: null,\n+       id: 1340,\n+       lastName: 'Nicht',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'Sarah',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 1341,\n+       lastName: 'Partner',\n+       title: 'Frau',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Services Partner',\n+       deleted: false,\n+       firstName: 'Stefan',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 1342,\n+       lastName: 'Bortolas',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Service Partner (der smarteste Service Partner wo gib)',\n+       deleted: true,\n+       firstName: 'Test',\n+       groupAdmin: false,\n+       groupUsers: null,\n+       id: 1346,\n+       lastName: 'Kandidat',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Service Partner (der smarteste Service Partner wo gib)',\n+       deleted: false,\n+       firstName: 'Marko',\n+       groupAdmin: false,\n+       groupUsers: null,\n+       id: 1347,\n+       lastName: 'Obradovic',\n+       title: 'Herr',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Service Partner (der smarteste Service Partner wo gib)',\n+       deleted: false,\n+       firstName: 'Teresa',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 1349,\n+       lastName: 'Klatzer',\n+       title: 'Frau',\n+     },\n+     {\n+       averageRating: null,\n+       companyName: 'Smart Service Partner (der smarteste Service Partner wo gib)',\n+       deleted: true,\n+       firstName: 'Peter',\n+       groupAdmin: true,\n+       groupUsers: null,\n+       id: 1354,\n+       lastName: 'Test',\n+       title: 'Herr',\n+     },\n    ],\n    totalCount: 49,\n  }"}
+            at: Test.fn (test/integration/Users/getUsersOfGroup.test.js:70:5)
+          ...
+      </failure>
     </testcase>
-    <testcase classname="integration.auth" name="skips unavailable provider" time="7.0">
-      <skipped message="Provider is disabled in this environment" />
+  </testsuite>
+  <testsuite tests="1" failures="0" errors="0" name="integration › Users › edit_user › /edit user (Customer): change name and phone number">
+    <testcase name="#5 integration › Users › edit_user › /edit user (Customer): change name and phone number" />
+  </testsuite>
+  <testsuite tests="1" failures="0" errors="0" name="integration › UseCases › partner › orders › order_edit_delivery › useCase: partner edits delivery of vessel">
+    <testcase name="#6 integration › UseCases › partner › orders › order_edit_delivery › useCase: partner edits delivery of vessel" />
+  </testsuite>
+  <testsuite tests="1" failures="0" errors="0" name="integration › UseCases › partner › orders › order_complete_truck_reservation › useCase: partner completes truck reservation">
+    <testcase name="#7 integration › UseCases › partner › orders › order_complete_truck_reservation › useCase: partner completes truck reservation" />
+  </testsuite>
+  <testsuite tests="1" failures="0" errors="0" name="integration › UseCases › partner › orders › order_complete_retrieval › useCase: partner completes retrieval of vessel with weight param (portal logic)">
+    <testcase name="#8 integration › UseCases › partner › orders › order_complete_retrieval › useCase: partner completes retrieval of vessel with weight param (portal logic)" />
+  </testsuite>
+  <testsuite tests="1" failures="0" errors="0" name="integration › UseCases › partner › orders › order_complete_retrieval › useCase: partner completes retrieval of vessel with quantity param (portal logic)">
+    <testcase name="#9 integration › UseCases › partner › orders › order_complete_retrieval › useCase: partner completes retrieval of vessel with quantity param (portal logic)" />
+  </testsuite>
+  <testsuite tests="1" failures="0" errors="0" name="integration › UseCases › partner › orders › order_complete_retrieval › useCase: partner completes retrieval of vessel (app logic)">
+    <testcase name="#10 integration › UseCases › partner › orders › order_complete_retrieval › useCase: partner completes retrieval of vessel (app logic)" />
+  </testsuite>
+  <testsuite tests="1" failures="0" errors="0" name="integration › UseCases › partner › orders › order_complete_retrieval_without_qr_code › useCase: partner completes retrieval of vessel without qr code (portal logic)">
+    <testcase name="#11 integration › UseCases › partner › orders › order_complete_retrieval_without_qr_code › useCase: partner completes retrieval of vessel without qr code (portal logic)" />
+  </testsuite>
+  <testsuite tests="1" failures="0" errors="0" name="integration › UseCases › partner › orders › order_complete_retrieval_without_qr_code › useCase: partner completes retrieval of vessel without qr code (app logic)">
+    <testcase name="#12 integration › UseCases › partner › orders › order_complete_retrieval_without_qr_code › useCase: partner completes retrieval of vessel without qr code (app logic)" />
+  </testsuite>
+  <testsuite tests="1" failures="0" errors="0" name="integration › UseCases › partner › orders › order_complete_retrieval_other_address › useCase: partner completes retrieval of vessel with building number in address (portal logic)">
+    <testcase name="#13 integration › UseCases › partner › orders › order_complete_retrieval_other_address › useCase: partner completes retrieval of vessel with building number in address (portal logic)" />
+  </testsuite>
+  <testsuite tests="1" failures="0" errors="0" name="integration › UseCases › partner › orders › order_complete_retrieval_corrected › useCase: partner completes retrieval of vessel with corrected_category_id (portal logic)">
+    <testcase name="#14 integration › UseCases › partner › orders › order_complete_retrieval_corrected › useCase: partner completes retrieval of vessel with corrected_category_id (portal logic)" />
+  </testsuite>
+  <testsuite tests="1" failures="0" errors="0" name="integration › UseCases › partner › orders › order_complete_retrieval_corrected › useCase: partner completes retrieval of vessel with corrected_category_id but no price (portal logic)">
+    <testcase name="#15 integration › UseCases › partner › orders › order_complete_retrieval_corrected › useCase: partner completes retrieval of vessel with corrected_category_id but no price (portal logic)" />
+  </testsuite>
+  <testsuite tests="1" failures="0" errors="0" name="integration › UseCases › partner › orders › order_complete_retrieval_corrected › useCase: partner completes retrieval of vessel with corrected_category_id that has mandatory feature (portal logic)">
+    <testcase name="#16 integration › UseCases › partner › orders › order_complete_retrieval_corrected › useCase: partner completes retrieval of vessel with corrected_category_id that has mandatory feature (portal logic)" />
+  </testsuite>
+  <testsuite tests="1" skipped="1" failures="0" errors="0" name="integration › UseCases › partner › orders › order_complete_retrieval_check_billing_status › check for bill_status after logistician completes immediate loading">
+    <testcase name="#19 integration › UseCases › partner › orders › order_complete_retrieval_check_billing_status › check for bill_status after logistician completes immediate loading">
+      <skipped />
+    </testcase>
+  </testsuite>
+  <testsuite tests="1" failures="1" errors="0" name="integration › UseCases › partner › orders › order_complete_retrieval_bigbag › useCase: driver completes bigbag retrieval (portal)">
+    <testcase name="#20 integration › UseCases › partner › orders › order_complete_retrieval_bigbag › useCase: driver completes bigbag retrieval (portal)">
+      <failure>
+          ---
+            name: AssertionError
+            message: accomplished (50) response is as expected
+            assertion: snapshot
+            values: {"Difference:":"  {\n    actualProcessTime: null,\n    allProducts: Array [ … ],\n    availability: Object { … },\n    comment: 'BigBag retrieval 1',\n    correspondingVesselChangeItem: null,\n    corresponding_item_vessel_id: null,\n    customer_company_name: 'Foitl Bau',\n    dangerousWasteLimit: '2 - 20t/Jahr',\n    featureObjects: [\n      {\n        count: 45,\n        customName: null,\n        customPrice: null,\n        feature_id: 42,\n-       quantity: 45,\n      },\n    ],\n    invoice_comment: null,\n    isFinalTotalPrice: false,\n    itemCancellationReason: null,\n    itemGroup: {\n      features: [],\n      id: 1,\n      items: [\n        {\n          actualProcessTime: null,\n          allProducts: Array [ … ],\n          availability: Object { … },\n          comment: 'BigBag retrieval 1',\n          corresponding_item_vessel_id: null,\n          customer_company_name: 'Foitl Bau',\n          dangerousWasteLimit: '2 - 20t/Jahr',\n          featureObjects: [\n            {\n              count: 45,\n              customName: null,\n              customPrice: null,\n              feature_id: 42,\n-             quantity: 45,\n            },\n          ],\n          invoice_comment: null,\n          isFinalTotalPrice: false,\n          itemCancellationReason: null,\n          item_cancellation_reason_id: null,\n          item_id: 1,\n          legal_weight_limit: null,\n          licence_plate: null,\n          order: Object { … },\n          order_id: 1,\n          partner: Object { … },\n          payment_id: 1,\n          pc_document_types: [],\n          possibleFeatures: Array [ … ],\n          possible_actions: Array [ … ],\n          previous_vessel_change_item_uuid: null,\n          price_id: 1,\n          purchaser_name: 'Andreas Opelt',\n          purchaser_telephone: '+4366412345675535',\n          rating: null,\n          status: 50,\n          statusColor: '#f0f0f0',\n          statusName: 'Abgeholt',\n          timeslot_id: null,\n          total_price: 0,\n          total_price_currency: 'EUR',\n          type: 2,\n          typeName: 'Abholung',\n          user: Object { … },\n          vessel_change: null,\n          vessel_id: null,\n          vessel_id_qr: 0,\n          vessel_position_angle: null,\n          vessel_position_lat: null,\n          vessel_position_long: null,\n          visibleFeatureObjects: [\n            {\n              count: 45,\n              customName: null,\n              customPrice: null,\n              feature_id: 42,\n-             quantity: 45,\n            },\n          ],\n        },\n        Object { … },\n      ],\n      itemseries: null,\n      type: 'bigbag',\n    },\n    item_cancellation_reason_id: null,\n    item_id: 1,\n    legal_weight_limit: null,\n    licence_plate: null,\n    order: Object { … },\n    order_id: 1,\n    partner: Object { … },\n    payment_id: 1,\n    pc_document_types: [],\n    possibleFeatures: Array [ … ],\n    possible_actions: Array [ … ],\n    previous_vessel_change_item_uuid: null,\n    price_id: 1,\n    purchaser_name: 'Andreas Opelt',\n    purchaser_telephone: '+4366412345675535',\n    rating: null,\n    status: 50,\n    statusColor: '#f0f0f0',\n    statusName: 'Abgeholt',\n    timeslot_id: null,\n    total_price: 0,\n    total_price_currency: 'EUR',\n    type: 2,\n    typeName: 'Abholung',\n    user: Object { … },\n    vessel_change: null,\n    vessel_id: null,\n    vessel_id_qr: 0,\n    vessel_position_angle: null,\n    vessel_position_lat: null,\n    vessel_position_long: null,\n    visibleFeatureObjects: [\n      {\n        count: 45,\n        customName: null,\n        customPrice: null,\n        feature_id: 42,\n-       quantity: 45,\n      },\n    ],\n  }"}
+            at: completeBigBag (test/integration/UseCases/partner/orders/order_complete_retrieval_bigbag.test.js:53:5)
+          ...
+      </failure>
+    </testcase>
+  </testsuite>
+  <testsuite tests="1" skipped="1" failures="0" errors="0" name="integration › Items › postItem › postItemRetrieval › /post item: type retrieval with valid timeslot (9-11) as customer service">
+    <testcase name="#347 integration › Items › postItem › postItemRetrieval › /post item: type retrieval with valid timeslot (9-11) as customer service">
+      <skipped />
+    </testcase>
+  </testsuite>
+  <testsuite tests="1" skipped="1" failures="0" errors="0" name="integration › Items › postItem › postItemDelivery › /post item: type delivery with valid timeslot (9-11) as admin">
+    <testcase name="#351 integration › Items › postItem › postItemDelivery › /post item: type delivery with valid timeslot (9-11) as admin">
+      <skipped />
+    </testcase>
+  </testsuite>
+  <testsuite tests="1" skipped="1" failures="0" errors="0" name="integration › Items › postItem › postItemChange › /post item: type change with valid timeslot (9-11) as customer service">
+    <testcase name="#356 integration › Items › postItem › postItemChange › /post item: type change with valid timeslot (9-11) as customer service">
+      <skipped />
+    </testcase>
+  </testsuite>
+  <testsuite tests="1" failures="1" errors="0" name="integration › Items › completeMultifractionItem › /complete multifraction retrieval (Partner): same fractions">
+    <testcase name="#386 integration › Items › completeMultifractionItem › /complete multifraction retrieval (Partner): same fractions">
+      <failure>
+          ---
+            name: AssertionError
+            message: Did not match snapshot
+            assertion: snapshot
+            values: {"Difference:":"  {\n    0: {\n      corrected_category_id: null,\n      corrected_price_id: null,\n-     density: '1.00',\n      is_main_fraction: 1,\n      item_id: 2,\n      legal_confirmation_info: null,\n      ordered_quantity: null,\n      ordered_unit: null,\n      ordered_unit_id: null,\n      product_id: 8,\n      quantity: '10.000',\n      type: 'waste',\n      type_id: 2,\n      unit: 't',\n      unit_id: 3,\n      weight: '10000.00',\n    },\n    1: {\n      corrected_category_id: 30,\n      corrected_price_id: 8,\n-     density: null,\n      is_main_fraction: 0,\n      item_id: 2,\n      legal_confirmation_info: null,\n      ordered_quantity: null,\n      ordered_unit: null,\n      ordered_unit_id: null,\n      product_id: null,\n      quantity: '20.000',\n      type: 'additional_waste',\n      type_id: 3,\n      unit: 't',\n      unit_id: 3,\n      weight: '20000.00',\n    },\n  }"}
+            at: runCompleteItemAsPartner (test/integration/Items/completeMultifractionItem.test.js:139:5)
+          ...
+      </failure>
+    </testcase>
+  </testsuite>
+  <testsuite tests="1" failures="1" errors="0" name="integration › Items › assignRecycler › /assignRecycler specific recycler address is assigned to the materialProduct of a delivery item">
+    <testcase name="#416 integration › Items › assignRecycler › /assignRecycler specific recycler address is assigned to the materialProduct of a delivery item">
+      <failure>
+          ---
+            name: AssertionError
+            message: Did not match snapshot
+            assertion: snapshot
+            values: {"Difference:":"  {\n    corrected_category_id: 10017,\n    corrected_price_id: 3,\n-   density: null,\n    id: 2,\n    is_main_fraction: 0,\n    item_id: 1,\n    legal_confirmation_info: null,\n    ordered_quantity: '2.000',\n    ordered_unit: 't',\n    ordered_unit_id: 3,\n    product_id: null,\n    quantity: '2.000',\n    type: 'material',\n    type_id: 4,\n    unit: 't',\n    unit_id: 3,\n    weight: '2000.00',\n  }"}
+            at: Test.fn (test/integration/Items/assignRecycler.test.js:119:5)
+          ...
+      </failure>
+    </testcase>
+  </testsuite>
+  <testsuite tests="1" skipped="1" failures="0" errors="0" name="integration › Arc › uploadWeightNoteFile › /upload weight note file to arc">
+    <testcase name="#588 integration › Arc › uploadWeightNoteFile › /upload weight note file to arc">
+      <skipped />
     </testcase>
   </testsuite>
 </testsuites>

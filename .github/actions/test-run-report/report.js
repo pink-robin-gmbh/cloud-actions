@@ -2,8 +2,12 @@ const fs = require('node:fs');
 const { XMLParser, XMLValidator } = require('fast-xml-parser');
 
 const MAX_MESSAGE_LENGTH = 11000;
-const MAX_FAILURE_DETAIL_LENGTH = 320;
+const MAX_FAILURE_DETAIL_LENGTH = 900;
+const MAX_FAILURE_VALUES_LENGTH = 2400;
 const MAX_FAILURE_NAME_LENGTH = 180;
+const MAX_FAILURES_IN_BLOCKS = 43;
+const MAX_BLOCK_TEXT_LENGTH = 3000;
+const MAX_CONTAINER_CHILD_BLOCKS = 10;
 
 const CREDENTIAL_PATTERNS = [
     /\b[A-Z0-9_-]*(?:AUTHORIZATION|PASSWORD|PASSWD|SECRET|TOKEN|API[_-]?KEY|CLIENT[_-]?SECRET)[A-Z0-9_-]*\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^,\s"'<>]+)/gi,
@@ -55,21 +59,43 @@ function findCases(node, cases = []) {
 }
 
 function scalarText(value) {
-    if (typeof value === 'string' || typeof value === 'number') return String(value);
+    if (typeof value === 'string' || typeof value === 'number') {
+        return { detail: String(value), values: '' };
+    }
     if (Array.isArray(value)) return scalarText(value[0]);
-    if (!value || typeof value !== 'object') return '';
-    return String(value['@_message'] || value['#text'] || '');
+    if (!value || typeof value !== 'object') return { detail: '', values: '' };
+    const message = String(value['@_message'] || '').trim();
+    const lines = String(value['#text'] || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const body = lines.find((line) => /^message:\s*/i.test(line))
+        || lines.find((line) => !/^(?:---|\.\.\.|name:|assertion:|values:)/i.test(line))
+        || '';
+    const detail = body.replace(/^message:\s*/i, '').trim();
+    const valuesLine = lines.find((line) => /^values:\s*/i.test(line));
+    let values = '';
+    if (valuesLine) {
+        try {
+            const parsed = JSON.parse(valuesLine.replace(/^values:\s*/i, ''));
+            values = Object.entries(parsed).map(([name, content]) => {
+                const label = name.replace(/:\s*$/, '');
+                return `${label}:\n${typeof content === 'string' ? content : JSON.stringify(content, null, 2)}`;
+            }).join('\n\n');
+        } catch {
+            values = valuesLine.replace(/^values:\s*/i, '');
+        }
+    }
+    return {
+        detail: [message, detail && detail !== message ? detail : ''].filter(Boolean).join(' — '),
+        values,
+    };
 }
 
 function failureDetail(testCase) {
     for (const kind of ['failure', 'error']) {
         if (Object.prototype.hasOwnProperty.call(testCase, kind)) {
-            const detail = testCase[kind];
-            const text = scalarText(detail);
-            return text.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || '';
+            return scalarText(testCase[kind]);
         }
     }
-    return '';
+    return { detail: '', values: '' };
 }
 
 function parseReport(reportPath, elapsedSeconds) {
@@ -102,6 +128,7 @@ function parseReport(reportPath, elapsedSeconds) {
     const cases = findCases(root);
     let passed = 0;
     let failed = 0;
+    let errors = 0;
     let skipped = 0;
     const failures = [];
 
@@ -113,9 +140,11 @@ function parseReport(reportPath, elapsedSeconds) {
         const className = getAttribute(testCase, 'classname');
         if (hasFailure || hasError) {
             failed += 1;
+            if (hasError) errors += 1;
             failures.push({
                 name: `${className ? `${className}: ` : ''}${name}`,
-                detail: failureDetail(testCase),
+                kind: hasError ? 'error' : 'failure',
+                ...failureDetail(testCase),
             });
         } else if (Object.prototype.hasOwnProperty.call(testCase, 'skipped')) {
             skipped += 1;
@@ -148,6 +177,7 @@ function parseReport(reportPath, elapsedSeconds) {
     return {
         passed,
         failed,
+        errors,
         skipped,
         executed: passed + failed,
         failures,
@@ -167,6 +197,20 @@ function sanitizeText(value, secret = '') {
         .replace(/_/g, '[underscore]')
         .replace(/`/g, "'")
         .replace(/~/g, '-');
+}
+
+function sanitizeTestName(value, secret = '') {
+    return sanitizeText(value, secret).replace(/\[underscore\]/g, '_');
+}
+
+function sanitizeCode(value, secret = '') {
+    let text = String(value || '');
+    if (secret) text = text.split(secret).join('[redacted]');
+    for (const pattern of CREDENTIAL_PATTERNS) text = text.replace(pattern, '[redacted]');
+    return text.replace(/@/g, '[at]')
+        .replace(/</g, '[lt]')
+        .replace(/>/g, '[gt]')
+        .replace(/`/g, "'");
 }
 
 function sanitizeUrl(value, secret = '') {
@@ -192,12 +236,10 @@ function metadataLines(metadata, secret) {
     const lines = [
         `Workflow: ${sanitizeText(metadata.workflow, secret).slice(0, 300) || 'unknown'}`,
         `Branch: ${sanitizeText(metadata.branch, secret).slice(0, 300) || 'unknown'}`,
-        `Commit: ${sanitizeText(metadata.commit, secret).slice(0, 40) || 'unknown'}`,
+        `Commit: ${sanitizeText(metadata.commit, secret).slice(0, 8) || 'unknown'}`,
     ];
     if (metadata.eventName === 'workflow_dispatch') {
         lines.push('Manual run');
-        const manualContext = sanitizeText(metadata.manualContext, secret).slice(0, 700);
-        if (manualContext) lines.push(`Overrides: ${manualContext}`);
     }
     return lines;
 }
@@ -225,7 +267,7 @@ function formatMessage(report, metadata, reportError, secret = '') {
     const failures = report ? report.failures : [];
     if (failures.length) lines.push('Failures:');
     const rows = failures.map((failure) => {
-        const name = sanitizeText(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
+        const name = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
         const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
         return `- ${name}${detail ? `: ${detail}` : ''}`;
     });
@@ -251,7 +293,188 @@ function formatMessage(report, metadata, reportError, secret = '') {
     return message.length > MAX_MESSAGE_LENGTH ? message.slice(0, MAX_MESSAGE_LENGTH) : message;
 }
 
-async function sendMessage(channel, token, message) {
+function blockLink(value, secret) {
+    const candidate = sanitizeUrl(value, secret);
+    if (!candidate) return '';
+    try {
+        const url = new URL(candidate);
+        if (url.protocol !== 'https:' || url.username || url.password) return '';
+        return url.href.length <= 1500 ? url.href : '';
+    } catch {
+        return '';
+    }
+}
+
+function formatBlocks(report, metadata, reportError, secret = '') {
+    let outcome = sanitizeText(metadata.testOutcome, secret).toUpperCase() || 'UNKNOWN';
+    if (report && report.failed) outcome = 'FAILURE';
+    let status = outcome;
+    if (reportError) status = '⚠️ REPORT UNAVAILABLE';
+    else if (outcome === 'SUCCESS') status = '✅ SUCCESS';
+    else if (outcome === 'FAILURE') status = '❌ FAILURE';
+    const workflow = sanitizeText(metadata.workflow, secret).slice(0, 300) || 'Test run';
+    const blocks = [{
+        type: 'header',
+        text: {
+            type: 'plain_text',
+            text: `${status} · ${workflow}`.slice(0, 150),
+            emoji: true,
+        },
+    }];
+
+    if (reportError) {
+        blocks.push({
+            type: 'section',
+            text: {
+                type: 'plain_text',
+                text: `Test report unavailable: ${sanitizeText(reportError, secret).slice(0, 400)}`,
+            },
+        });
+    }
+
+    if (!reportError) {
+        const errors = report.errors || 0;
+        const metrics = [
+            ['Passed', report.passed],
+            ['Skipped', report.skipped],
+            ['Failures', report.failed],
+            ['Errors', errors],
+            ['Total tests', report.executed + report.skipped],
+            ['Duration', formatDuration(report.durationSeconds)],
+        ];
+        blocks.push({
+            type: 'section',
+            fields: metrics.map(([name, value]) => ({ type: 'mrkdwn', text: `*${name}*\n${value}` })),
+        });
+    }
+
+    const branch = sanitizeText(metadata.branch, secret).slice(0, 300) || 'unknown';
+    const commit = sanitizeText(metadata.commit, secret).slice(0, 8) || 'unknown';
+    const context = [{ type: 'plain_text', text: `Branch: ${branch} · Commit: ${commit}` }];
+    if (metadata.eventName === 'workflow_dispatch') {
+        context.push({ type: 'plain_text', text: 'Manual run' });
+    }
+    blocks.push({ type: 'context', elements: context });
+
+    const failures = report ? report.failures : [];
+    const hasActions = Boolean(
+        blockLink(metadata.runUrl, secret) || blockLink(metadata.artifactUrl, secret),
+    );
+    if (failures.length) {
+        const availableSlots = Math.max(
+            0,
+            50 - blocks.length - 2 - (hasActions ? 2 : 0) - 2,
+        );
+        const displayedFailures = failures.slice(0, Math.min(MAX_FAILURES_IN_BLOCKS, availableSlots));
+        blocks.push({ type: 'divider' });
+        const more = displayedFailures.length < failures.length
+            ? ` (showing first ${displayedFailures.length})`
+            : '';
+        blocks.push({
+            type: 'section',
+            text: { type: 'mrkdwn', text: `*Failures (${failures.length})*${more}` },
+        });
+        for (const failure of displayedFailures) {
+            const fullName = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH)
+                || 'unnamed test';
+            const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
+            const kind = failure.kind === 'error' ? 'ERROR' : 'FAIL';
+            blocks.push({
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text: `*${kind} · ${fullName}*\n> ${detail || 'Reason unavailable in xUnit report.'}`,
+                },
+            });
+        }
+        blocks.push(...formatFailureDetails(report, secret));
+    }
+
+    const buttons = [];
+    const runUrl = blockLink(metadata.runUrl, secret);
+    const artifactUrl = blockLink(metadata.artifactUrl, secret);
+    if (runUrl) {
+        buttons.push({
+            type: 'button',
+            action_id: 'open_actions_run',
+            text: { type: 'plain_text', text: 'Open workflow run', emoji: true },
+            url: runUrl,
+        });
+    }
+    if (artifactUrl) {
+        buttons.push({
+            type: 'button',
+            action_id: 'open_test_artifact',
+            text: { type: 'plain_text', text: 'Open test artifact', emoji: true },
+            url: artifactUrl,
+        });
+    }
+    if (buttons.length) blocks.push({ type: 'actions', elements: buttons });
+
+    return blocks;
+}
+
+function formatFailureDetails(report, secret = '') {
+    const failures = report ? report.failures : [];
+    if (!failures.length) return [];
+
+    const chunks = [];
+    let text = '';
+    let failureCount = 0;
+    for (const failure of failures) {
+        const name = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH)
+            || 'unnamed test';
+        const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
+        let failureText = `*${failure.kind === 'error' ? 'ERROR' : 'FAIL'} · ${name}*\n*${detail || 'Reason unavailable in xUnit report.'}*`;
+        if (failure.values) {
+            const values = sanitizeCode(failure.values, secret);
+            const valueLimit = Math.min(
+                MAX_FAILURE_VALUES_LENGTH,
+                MAX_BLOCK_TEXT_LENGTH - failureText.length - 32,
+            );
+            const clipped = values.length > valueLimit;
+            failureText += `\n\`\`\`\n${values.slice(0, valueLimit)}${clipped ? '\n… details truncated' : ''}\n\`\`\``;
+        }
+        const nextText = text ? `${text}\n\n${failureText}` : failureText;
+        if (nextText.length > MAX_BLOCK_TEXT_LENGTH) {
+            chunks.push({ text, failureCount });
+            text = failureText;
+            failureCount = 1;
+        } else {
+            text = nextText;
+            failureCount += 1;
+        }
+    }
+    if (text) chunks.push({ text, failureCount });
+
+    const displayedChunks = chunks.length > MAX_CONTAINER_CHILD_BLOCKS
+        ? chunks.slice(0, MAX_CONTAINER_CHILD_BLOCKS - 1)
+        : chunks;
+    const displayedFailures = displayedChunks.reduce((total, chunk) => total + chunk.failureCount, 0);
+    const childBlocks = displayedChunks.map((chunk) => ({
+        type: 'section',
+        text: { type: 'mrkdwn', text: chunk.text },
+    }));
+    if (displayedFailures < failures.length) {
+        childBlocks.push({
+            type: 'section',
+            text: {
+                type: 'plain_text',
+                text: `${failures.length - displayedFailures} more failures omitted`,
+            },
+        });
+    }
+    return [{
+        type: 'container',
+        title: { type: 'plain_text', text: 'Expand for failure details' },
+        width: 'full',
+        is_collapsible: true,
+        default_collapsed: true,
+        child_blocks: childBlocks,
+    }];
+}
+
+async function sendMessage(channel, token, message, blocks, threadTs) {
     if (!channel) throw new Error('Slack channel ID is not configured');
     if (!token) throw new Error('Slack bot token is not configured');
 
@@ -263,7 +486,13 @@ async function sendMessage(channel, token, message) {
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json; charset=utf-8',
             },
-            body: JSON.stringify({ channel, text: message, mrkdwn: false }),
+            body: JSON.stringify({
+                channel,
+                text: message,
+                mrkdwn: false,
+                ...(blocks ? { blocks } : {}),
+                ...(threadTs ? { thread_ts: threadTs } : {}),
+            }),
             signal: AbortSignal.timeout(20000),
         });
     } catch {
@@ -283,6 +512,7 @@ async function sendMessage(channel, token, message) {
             .slice(0, 160);
         throw new Error(`Slack rejected the message: ${safeError}`);
     }
+    return result.ts;
 }
 
 function writeWarning(message, token) {
@@ -314,16 +544,21 @@ async function main(environment = process.env) {
         branch: environment.BRANCH,
         commit: environment.COMMIT,
         eventName: environment.EVENT_NAME,
-        manualContext: environment.MANUAL_CONTEXT,
         runUrl: environment.RUN_URL,
         artifactUrl: environment.ARTIFACT_URL,
         testOutcome: environment.TEST_OUTCOME,
     };
     const message = formatMessage(report, metadata, reportError, token);
+    const blocks = formatBlocks(report, metadata, reportError, token);
     const errors = [];
     if (reportError) errors.push(reportError);
     try {
-        await sendMessage(environment.SLACK_CHANNEL_ID || '', token, message);
+        await sendMessage(
+            environment.SLACK_CHANNEL_ID || '',
+            token,
+            message,
+            blocks,
+        );
     } catch (error) {
         errors.push(error.message);
     }
@@ -339,6 +574,8 @@ module.exports = {
     MAX_MESSAGE_LENGTH,
     ReportError,
     formatMessage,
+    formatBlocks,
+    formatFailureDetails,
     main,
     parseReport,
     sendMessage,
