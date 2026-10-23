@@ -197,6 +197,10 @@ function sanitizeText(value, secret = '') {
         .replace(/~/g, '-');
 }
 
+function sanitizeTestName(value, secret = '', markdown = false) {
+    return sanitizeText(value, secret).replace(/\[underscore\]/g, markdown ? '\\_' : '_');
+}
+
 function sanitizeCode(value, secret = '') {
     let text = String(value || '');
     if (secret) text = text.split(secret).join('[redacted]');
@@ -343,7 +347,7 @@ function formatBlocks(report, metadata, reportError, secret = '') {
     }
 
     const branch = sanitizeText(metadata.branch, secret).slice(0, 300) || 'unknown';
-    const commit = sanitizeText(metadata.commit, secret).slice(0, 40) || 'unknown';
+    const commit = sanitizeText(metadata.commit, secret).slice(0, 8) || 'unknown';
     const context = [{ type: 'plain_text', text: `Branch: ${branch} · Commit: ${commit}` }];
     if (metadata.eventName === 'workflow_dispatch') {
         context.push({ type: 'plain_text', text: 'Manual run' });
@@ -373,7 +377,8 @@ function formatBlocks(report, metadata, reportError, secret = '') {
             text: { type: 'mrkdwn', text: `*Failures (${failures.length})*${more}` },
         });
         for (const failure of displayedFailures) {
-            const name = sanitizeText(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
+            const name = sanitizeTestName(failure.name, secret, true)
+                .slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
             const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
             const kind = failure.kind === 'error' ? 'ERROR' : 'FAIL';
             blocks.push({
@@ -387,9 +392,13 @@ function formatBlocks(report, metadata, reportError, secret = '') {
                 const values = sanitizeCode(failure.values, secret);
                 const clipped = values.length > MAX_FAILURE_VALUES_LENGTH;
                 const preview = values.slice(0, MAX_FAILURE_VALUES_LENGTH);
+                const testId = (failure.name.match(/#\d+/) || [''])[0];
                 blocks.push({
                     type: 'container',
-                    title: { type: 'plain_text', text: 'Details' },
+                    title: {
+                        type: 'plain_text',
+                        text: `Details${testId ? ` · ${testId}` : ''}`,
+                    },
                     is_collapsible: true,
                     default_collapsed: true,
                     child_blocks: [{

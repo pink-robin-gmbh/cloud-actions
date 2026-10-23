@@ -191,9 +191,13 @@ test('shows the exact failing test and both xUnit reason fields in the dashboard
     );
     assert.match(rendered, /\*FAIL · #4 integration › Users › getUsersOfGroup/);
     assert.match(rendered, /> Did not match snapshot/);
+    const testNameBlock = blocks.find((block) => block.type === 'section'
+        && block.text && block.text.text.includes('#20 integration'));
+    assert.ok(testNameBlock);
+    assert.match(testNameBlock.text.text, /order\\_complete/);
     const detailsBlock = blocks.find((block) => block.type === 'container');
     assert.ok(detailsBlock);
-    assert.equal(detailsBlock.title.text, 'Details');
+    assert.equal(detailsBlock.title.text, 'Details · #4');
     assert.equal(detailsBlock.is_collapsible, true);
     assert.equal(detailsBlock.default_collapsed, true);
     assert.match(detailsBlock.child_blocks[0].text.text, /```[\s\S]*\+\s+\{/);
