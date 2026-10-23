@@ -130,6 +130,14 @@ test('formats a compact success summary with duration and run link', () => {
     assert.match(message, /5 executed \(5 passed, 0 failed\); 2 skipped/);
     assert.match(message, /Test duration: 1m 2s/);
     assert.match(message, new RegExp(metadata.runUrl));
+    assert.match(formatBlocks({
+        passed: 5,
+        failed: 0,
+        skipped: 2,
+        executed: 5,
+        failures: [],
+        durationSeconds: 62,
+    }, metadata)[0].text.text, /✅ SUCCESS · Integration tests/);
 });
 
 test('formats a Block Kit summary with metrics, failure details, and safe link buttons', () => {
@@ -145,13 +153,12 @@ test('formats a Block Kit summary with metrics, failure details, and safe link b
     const blocks = formatBlocks(report, metadata, undefined, 'bot-secret');
 
     assert.equal(blocks[0].type, 'header');
-    assert.match(blocks[0].text.text, /FAILURE · Integration tests/);
-    assert.doesNotMatch(JSON.stringify(blocks), /✅|❌|⚪|💤|🔥|🧪|⏱/);
+    assert.match(blocks[0].text.text, /❌ FAILURE · Integration tests/);
     assert.deepEqual(
-        blocks[2].fields.map((field) => field.text),
+        blocks[1].fields.map((field) => field.text),
         ['*Passed*\n2', '*Skipped*\n1', '*Failures*\n1', '*Errors*\n0', '*Total tests*\n4', '*Duration*\n1m 2s'],
     );
-    assert.equal(blocks[2].fields.every((field) => field.type === 'mrkdwn'), true);
+    assert.equal(blocks[1].fields.every((field) => field.type === 'mrkdwn'), true);
     assert.match(JSON.stringify(blocks), /test \[at\]here \[star\]notify\[star\]/);
     assert.match(JSON.stringify(blocks), /\[redacted\]/);
     assert.doesNotMatch(JSON.stringify(blocks), /@here|verysecret/);
@@ -176,14 +183,14 @@ test('shows the exact failing test and both xUnit reason fields in the dashboard
         [594, 4, 0, 5, 603],
     );
     assert.deepEqual(
-        blocks[2].fields.map((field) => field.text),
+        blocks[1].fields.map((field) => field.text),
         ['*Passed*\n594', '*Skipped*\n5', '*Failures*\n4', '*Errors*\n0', '*Total tests*\n603', '*Duration*\nunavailable'],
     );
     assert.match(rendered, /\*FAIL · #4 integration › Users › getUsersOfGroup/);
     assert.match(rendered, /> Did not match snapshot/);
     assert.match(rendered, /\*FAIL · #20 integration › UseCases/);
     assert.ok(blocks.findIndex((block) => block.type === 'divider')
-        > blocks.findIndex((block) => block.fields));
+        > blocks.findIndex((block) => block.type === 'context'));
 });
 
 test('bounds Block Kit failure details and omits unsafe links', () => {
@@ -207,8 +214,8 @@ test('bounds Block Kit failure details and omits unsafe links', () => {
     assert.ok(blocks.length <= 50);
     assert.match(blocks[4].text.text, /showing first 43/);
     assert.equal(blocks.filter((block) => block.type === 'section').length, 45);
-    assert.equal(blocks[1].type, 'context');
-    assert.equal(oversizedUrlBlocks[1].type, 'context');
+    assert.equal(blocks[2].type, 'context');
+    assert.equal(oversizedUrlBlocks[2].type, 'context');
     assert.equal(blocks.some((block) => block.type === 'actions'), false);
     assert.equal(oversizedUrlBlocks.some((block) => block.type === 'actions'), false);
 });
@@ -228,8 +235,9 @@ test('shows manual run without overrides or invented counts for unavailable repo
     assert.doesNotMatch(message, /0 executed/);
     assert.match(JSON.stringify(blocks), /Manual run/);
     assert.doesNotMatch(JSON.stringify(blocks), /Overrides:|VersionCore=develop|SkipDeploy=true/);
-    assert.equal(blocks[1].type, 'context');
-    assert.equal(blocks[2].type, 'section');
+    assert.match(blocks[0].text.text, /⚠️ REPORT UNAVAILABLE · Integration tests/);
+    assert.equal(blocks[2].type, 'context');
+    assert.equal(blocks[1].type, 'section');
 });
 
 test('sanitizes mentions, formatting, and credential-like failure details', () => {
