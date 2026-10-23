@@ -63,8 +63,12 @@ function scalarText(value) {
     if (Array.isArray(value)) return scalarText(value[0]);
     if (!value || typeof value !== 'object') return '';
     const message = String(value['@_message'] || '').trim();
-    const body = String(value['#text'] || '').split(/\r?\n/).map((line) => line.trim()).find(Boolean) || '';
-    return [message, body && body !== message ? body : ''].filter(Boolean).join(' — ');
+    const lines = String(value['#text'] || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const body = lines.find((line) => /^message:\s*/i.test(line))
+        || lines.find((line) => !/^(?:---|\.\.\.|name:|assertion:|values:)/i.test(line))
+        || '';
+    const detail = body.replace(/^message:\s*/i, '');
+    return [message, detail && detail !== message ? detail : ''].filter(Boolean).join(' — ');
 }
 
 function failureDetail(testCase) {

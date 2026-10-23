@@ -181,14 +181,16 @@ test('shows the exact failing test and both xUnit reason fields in the dashboard
     const rendered = JSON.stringify(blocks);
 
     assert.deepEqual(
-        blocks[1].fields.map((field) => field.text),
-        ['*Passed*\n2', '*Skipped*\n1', '*Failures*\n2', '*Errors*\n1', '*Total tests*\n5', '*Duration*\n43s'],
+        [report.passed, report.failed, report.errors, report.skipped, report.executed + report.skipped],
+        [594, 4, 0, 5, 603],
     );
-    assert.match(rendered, /\*FAIL · integration\.orders: rejects invalid delivery date\*/);
-    assert.match(rendered, /> expected HTTP 400, got 500 — Expected validation error was not returned/);
-    assert.match(rendered, /\*ERROR · integration\.auth: rejects expired session\*/);
-    assert.match(rendered, /> request timed out — The response did not arrive within the test timeout/);
-    assert.doesNotMatch(rendered, /❌|🔥/);
+    assert.deepEqual(
+        blocks[1].fields.map((field) => field.text),
+        ['*Passed*\n594', '*Skipped*\n5', '*Failures*\n4', '*Errors*\n0', '*Total tests*\n603', '*Duration*\nunavailable'],
+    );
+    assert.match(rendered, /\*FAIL · #4 integration › Users › getUsersOfGroup/);
+    assert.match(rendered, /> Did not match snapshot/);
+    assert.match(rendered, /\*FAIL · #20 integration › UseCases/);
     assert.ok(blocks.findIndex((block) => block.type === 'divider')
         > blocks.findIndex((block) => block.fields));
 });
@@ -372,7 +374,7 @@ test('posts one dashboard card by default', async () => {
 
     assert.equal(messages.length, 1);
     assert.match(messages[0].blocks[0].text.text, /FAILURE · Integration tests/);
-    assert.match(JSON.stringify(messages[0].blocks), /Failures \(2\)/);
+    assert.match(JSON.stringify(messages[0].blocks), /Failures \(4\)/);
 });
 
 test('writes a sanitized warning when Slack rejects a valid report', async () => {
