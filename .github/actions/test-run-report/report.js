@@ -387,7 +387,7 @@ function formatBlocks(report, metadata, reportError, secret = '') {
                 },
             });
         }
-        blocks.push({ type: 'divider' }, ...formatFailureDetails(report, secret));
+        blocks.push(...formatFailureDetails(report, secret));
     }
 
     const buttons = [];

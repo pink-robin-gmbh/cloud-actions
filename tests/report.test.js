@@ -203,6 +203,7 @@ test('shows the exact failing test and both xUnit reason fields in the dashboard
     assert.equal(details.is_collapsible, true);
     assert.equal(details.default_collapsed, true);
     assert.ok(details.child_blocks.some((block) => block.text.text.includes('averageRating: null')));
+    assert.equal(blocks[blocks.indexOf(details) - 1].type, 'section');
     assert.match(rendered, /\*FAIL · #20 integration › UseCases/);
     assert.ok(blocks.findIndex((block) => block.type === 'divider')
         > blocks.findIndex((block) => block.type === 'context'));
