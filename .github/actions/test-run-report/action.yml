@@ -4,6 +4,10 @@ inputs:
   report-path:
     description: Path to the xUnit report
     required: true
+  format:
+    description: Slack report layout (dashboard, compact, failure-first, or compare)
+    required: false
+    default: dashboard
   test-outcome:
     description: Outcome of the test execution step
     required: true
@@ -48,6 +52,7 @@ runs:
       shell: bash
       env:
         REPORT_PATH: ${{ inputs.report-path }}
+        REPORT_FORMAT: ${{ inputs.format }}
         TEST_OUTCOME: ${{ inputs.test-outcome }}
         TEST_DURATION_SECONDS: ${{ inputs.test-duration-seconds }}
         WORKFLOW: ${{ inputs.workflow }}

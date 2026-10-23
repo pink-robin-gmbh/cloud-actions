@@ -24,10 +24,11 @@ jobs:
         with:
           name: Slack report formatting sample
           path: tests/fixtures/slack-report.xml
-      - name: Post sample report to Slack
+      - name: Post sample reports in three layouts
         uses: ./.github/actions/test-run-report
         with:
           report-path: tests/fixtures/slack-report.xml
+          format: compare
           test-outcome: failure
           workflow: ${{ github.workflow }}
           branch: ${{ github.ref_name }}

@@ -155,6 +155,32 @@ test('formats a Block Kit summary with metrics, failure details, and safe link b
     assert.equal(blocks.at(-1).elements[0].url, metadata.runUrl);
 });
 
+test('formats compact and failure-first Block Kit layouts', () => {
+    const report = {
+        passed: 2,
+        failed: 2,
+        skipped: 1,
+        executed: 4,
+        failures: [
+            { name: 'invalid delivery date', detail: 'Expected HTTP 400, got 500.' },
+            { name: 'expired session', detail: 'The response did not arrive within the test timeout.' },
+        ],
+        durationSeconds: 42.7,
+    };
+
+    const compact = formatBlocks(report, metadata, undefined, '', 'compact', 'Compact');
+    assert.match(JSON.stringify(compact), /4 executed · 2 passed · 2 failed · 1 skipped · 43s/);
+    assert.match(JSON.stringify(compact), /invalid delivery date/);
+    assert.match(JSON.stringify(compact), /Preview: Compact/);
+    assert.ok(compact.length < 10);
+
+    const failureFirst = formatBlocks(report, metadata, undefined, '', 'failure-first', 'Failure-first');
+    assert.match(failureFirst[2].text.text, /Failures \(2\)/);
+    assert.match(failureFirst[3].text.text, /invalid delivery date/);
+    assert.match(failureFirst[4].text.text, /expired session/);
+    assert.equal(failureFirst.at(-1).type, 'actions');
+});
+
 test('bounds Block Kit failure details and omits unsafe links', () => {
     const report = {
         passed: 0,
@@ -304,6 +330,33 @@ test('posts an unavailable-report warning without fabricated counts', async () =
     assert.doesNotMatch(messages[0].text, /0 executed/);
     assert.ok(logs.some((line) => line.includes('::warning::Test report is missing')));
     assert.ok(logs.every((line) => !line.includes('bot-secret')));
+});
+
+test('comparison mode posts compact, failure-first, and dashboard messages', async () => {
+    const messages = [];
+    await withMockFetch(async (_url, options) => {
+        messages.push(JSON.parse(options.body));
+        return { ok: true, json: async () => ({ ok: true }) };
+    }, async () => {
+        const result = await main({
+            REPORT_PATH: path.join(fixturesPath, 'slack-report.xml'),
+            REPORT_FORMAT: 'compare',
+            TEST_OUTCOME: 'failure',
+            WORKFLOW: 'Integration tests',
+            BRANCH: 'main',
+            COMMIT: 'abc123',
+            EVENT_NAME: 'push',
+            RUN_URL: 'https://github.com/example/repo/actions/runs/42',
+            SLACK_CHANNEL_ID: 'C123',
+            SLACK_BOT_TOKEN: 'bot-secret',
+        });
+        assert.equal(result, 0);
+    });
+
+    assert.equal(messages.length, 3);
+    assert.match(messages[0].blocks[0].text.text, /Compact/);
+    assert.match(messages[1].blocks[0].text.text, /Failure-first/);
+    assert.match(messages[2].blocks[0].text.text, /Dashboard card/);
 });
 
 test('writes a sanitized warning when Slack rejects a valid report', async () => {

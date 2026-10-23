@@ -5,6 +5,7 @@ const MAX_MESSAGE_LENGTH = 11000;
 const MAX_FAILURE_DETAIL_LENGTH = 320;
 const MAX_FAILURE_NAME_LENGTH = 180;
 const MAX_FAILURES_IN_BLOCKS = 43;
+const MAX_COMPACT_FAILURES = 5;
 
 const CREDENTIAL_PATTERNS = [
     /\b[A-Z0-9_-]*(?:AUTHORIZATION|PASSWORD|PASSWD|SECRET|TOKEN|API[_-]?KEY|CLIENT[_-]?SECRET)[A-Z0-9_-]*\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^,\s"'<>]+)/gi,
@@ -264,14 +265,18 @@ function blockLink(value, secret) {
     }
 }
 
-function formatBlocks(report, metadata, reportError, secret = '') {
+function formatBlocks(report, metadata, reportError, secret = '', layout = 'dashboard', label = '') {
     let outcome = sanitizeText(metadata.testOutcome, secret).toUpperCase() || 'UNKNOWN';
     if (report && report.failed) outcome = 'FAILURE';
     const workflow = sanitizeText(metadata.workflow, secret).slice(0, 300) || 'Test run';
     const emoji = outcome === 'SUCCESS' ? '✅' : outcome === 'FAILURE' ? '❌' : '⚪';
     const blocks = [{
         type: 'header',
-        text: { type: 'plain_text', text: `${emoji} ${outcome} · ${workflow}`.slice(0, 150), emoji: true },
+        text: {
+            type: 'plain_text',
+            text: `${emoji} ${outcome} · ${workflow}${label ? ` · ${label}` : ''}`.slice(0, 150),
+            emoji: true,
+        },
     }];
 
     if (reportError) {
@@ -282,7 +287,35 @@ function formatBlocks(report, metadata, reportError, secret = '') {
                 text: `Test report unavailable: ${sanitizeText(reportError, secret).slice(0, 400)}`,
             },
         });
-    } else {
+    } else if (layout === 'compact') {
+        blocks.push({
+            type: 'section',
+            text: {
+                type: 'plain_text',
+                text: `${report.executed} executed · ${report.passed} passed · ${report.failed} failed · `
+                    + `${report.skipped} skipped · ${formatDuration(report.durationSeconds)}`,
+            },
+        });
+    } else if (layout === 'failure-first' && report.failed) {
+        blocks.push({ type: 'divider' });
+        const more = report.failed > MAX_FAILURES_IN_BLOCKS
+            ? ` — showing first ${MAX_FAILURES_IN_BLOCKS}`
+            : '';
+        blocks.push({
+            type: 'section',
+            text: { type: 'plain_text', text: `Failures (${report.failed})${more}` },
+        });
+        for (const failure of report.failures.slice(0, MAX_FAILURES_IN_BLOCKS)) {
+            const name = sanitizeText(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
+            const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
+            blocks.push({
+                type: 'section',
+                text: { type: 'plain_text', text: `${name}${detail ? `\n${detail}` : ''}` },
+            });
+        }
+    }
+
+    if (!reportError && layout !== 'compact') {
         blocks.push({
             type: 'section',
             fields: [
@@ -292,6 +325,21 @@ function formatBlocks(report, metadata, reportError, secret = '') {
                 { type: 'plain_text', text: `Skipped\n${report.skipped}`, emoji: true },
                 { type: 'plain_text', text: `Duration\n${formatDuration(report.durationSeconds)}`, emoji: true },
             ],
+        });
+    } else if (!reportError && layout === 'compact' && report.failed) {
+        const failures = report.failures.slice(0, MAX_COMPACT_FAILURES).map((failure) => {
+            const name = sanitizeText(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
+            const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
+            return `${name}${detail ? `: ${detail}` : ''}`;
+        });
+        const omitted = report.failed - failures.length;
+        blocks.push({
+            type: 'section',
+            text: {
+                type: 'plain_text',
+                text: `Failures:\n${failures.join('\n')}${omitted ? `\nOmitted failure details: ${omitted}` : ''}`
+                    .slice(0, 2900),
+            },
         });
     }
 
@@ -306,7 +354,7 @@ function formatBlocks(report, metadata, reportError, secret = '') {
     blocks.push({ type: 'context', elements: context });
 
     const failures = report ? report.failures : [];
-    if (failures.length) {
+    if (layout === 'dashboard' && failures.length) {
         blocks.push({ type: 'divider' });
         const more = failures.length > MAX_FAILURES_IN_BLOCKS
             ? ` (showing first ${MAX_FAILURES_IN_BLOCKS})`
@@ -324,6 +372,8 @@ function formatBlocks(report, metadata, reportError, secret = '') {
             });
         }
     }
+
+    if (label) blocks.push({ type: 'context', elements: [{ type: 'plain_text', text: `Preview: ${label}` }] });
 
     const buttons = [];
     const runUrl = blockLink(metadata.runUrl, secret);
@@ -423,13 +473,28 @@ async function main(environment = process.env) {
         testOutcome: environment.TEST_OUTCOME,
     };
     const message = formatMessage(report, metadata, reportError, token);
-    const blocks = formatBlocks(report, metadata, reportError, token);
     const errors = [];
     if (reportError) errors.push(reportError);
-    try {
-        await sendMessage(environment.SLACK_CHANNEL_ID || '', token, message, blocks);
-    } catch (error) {
-        errors.push(error.message);
+    const selectedFormat = environment.REPORT_FORMAT || 'dashboard';
+    const formats = selectedFormat === 'compare'
+        ? [
+            ['compact', 'Compact'],
+            ['failure-first', 'Failure-first'],
+            ['dashboard', 'Dashboard card'],
+        ]
+        : [[selectedFormat, '']];
+    for (const [layout, label] of formats) {
+        const blocks = formatBlocks(report, metadata, reportError, token, layout, label);
+        try {
+            await sendMessage(
+                environment.SLACK_CHANNEL_ID || '',
+                token,
+                message,
+                blocks,
+            );
+        } catch (error) {
+            errors.push(error.message);
+        }
     }
 
     if (errors.length) {
