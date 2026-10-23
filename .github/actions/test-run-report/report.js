@@ -3,6 +3,7 @@ const { XMLParser, XMLValidator } = require('fast-xml-parser');
 
 const MAX_MESSAGE_LENGTH = 11000;
 const MAX_FAILURE_DETAIL_LENGTH = 900;
+const MAX_FAILURE_VALUES_LENGTH = 2400;
 const MAX_FAILURE_NAME_LENGTH = 180;
 const MAX_FAILURES_IN_BLOCKS = 43;
 
@@ -56,9 +57,11 @@ function findCases(node, cases = []) {
 }
 
 function scalarText(value) {
-    if (typeof value === 'string' || typeof value === 'number') return String(value);
+    if (typeof value === 'string' || typeof value === 'number') {
+        return { detail: String(value), values: '' };
+    }
     if (Array.isArray(value)) return scalarText(value[0]);
-    if (!value || typeof value !== 'object') return '';
+    if (!value || typeof value !== 'object') return { detail: '', values: '' };
     const message = String(value['@_message'] || '').trim();
     const lines = String(value['#text'] || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const body = lines.find((line) => /^message:\s*/i.test(line))
@@ -70,36 +73,27 @@ function scalarText(value) {
     if (valuesLine) {
         try {
             const parsed = JSON.parse(valuesLine.replace(/^values:\s*/i, ''));
-            values = Object.entries(parsed).map(([name, value]) => {
+            values = Object.entries(parsed).map(([name, content]) => {
                 const label = name.replace(/:\s*$/, '');
-                if (typeof value !== 'string') return `${label}: ${JSON.stringify(value)}`;
-                const changes = value.split(/\r?\n/)
-                    .map((line) => line.trim())
-                    .map((line) => line.match(/^([+-])\s*(.+)$/))
-                    .filter((match) => match && !/^[{}[\],]+$/.test(match[2]));
-                if (!changes.length) return `${label}: ${value.replace(/\s+/g, ' ').trim()}`;
-                const shown = changes.slice(0, 5)
-                    .map(([, sign, text]) => `${sign} ${text.replace(/,\s*$/, '')}`);
-                const omitted = changes.length - shown.length;
-                return `${label}: ${shown.join('; ')}${omitted ? `; … ${omitted} more changes` : ''}`;
-            }).join(' · ');
+                return `${label}:\n${typeof content === 'string' ? content : JSON.stringify(content, null, 2)}`;
+            }).join('\n\n');
         } catch {
             values = valuesLine.replace(/^values:\s*/i, '');
         }
     }
-    return [message, detail && detail !== message ? detail : '', values ? `Values: ${values}` : '']
-        .filter(Boolean).join(' — ');
+    return {
+        detail: [message, detail && detail !== message ? detail : ''].filter(Boolean).join(' — '),
+        values,
+    };
 }
 
 function failureDetail(testCase) {
     for (const kind of ['failure', 'error']) {
         if (Object.prototype.hasOwnProperty.call(testCase, kind)) {
-            const detail = testCase[kind];
-            const text = scalarText(detail);
-            return text;
+            return scalarText(testCase[kind]);
         }
     }
-    return '';
+    return { detail: '', values: '' };
 }
 
 function parseReport(reportPath, elapsedSeconds) {
@@ -148,7 +142,7 @@ function parseReport(reportPath, elapsedSeconds) {
             failures.push({
                 name: `${className ? `${className}: ` : ''}${name}`,
                 kind: hasError ? 'error' : 'failure',
-                detail: failureDetail(testCase),
+                ...failureDetail(testCase),
             });
         } else if (Object.prototype.hasOwnProperty.call(testCase, 'skipped')) {
             skipped += 1;
@@ -201,6 +195,16 @@ function sanitizeText(value, secret = '') {
         .replace(/_/g, '[underscore]')
         .replace(/`/g, "'")
         .replace(/~/g, '-');
+}
+
+function sanitizeCode(value, secret = '') {
+    let text = String(value || '');
+    if (secret) text = text.split(secret).join('[redacted]');
+    for (const pattern of CREDENTIAL_PATTERNS) text = text.replace(pattern, '[redacted]');
+    return text.replace(/@/g, '[at]')
+        .replace(/</g, '[lt]')
+        .replace(/>/g, '[gt]')
+        .replace(/`/g, "'");
 }
 
 function sanitizeUrl(value, secret = '') {
@@ -347,16 +351,28 @@ function formatBlocks(report, metadata, reportError, secret = '') {
     blocks.push({ type: 'context', elements: context });
 
     const failures = report ? report.failures : [];
+    const hasActions = Boolean(
+        blockLink(metadata.runUrl, secret) || blockLink(metadata.artifactUrl, secret),
+    );
     if (failures.length) {
+        const availableSlots = 50 - blocks.length - 2 - (hasActions ? 1 : 0);
+        const displayedFailures = [];
+        let remainingSlots = availableSlots;
+        for (const failure of failures.slice(0, MAX_FAILURES_IN_BLOCKS)) {
+            const requiredSlots = failure.values ? 2 : 1;
+            if (requiredSlots > remainingSlots) break;
+            displayedFailures.push(failure);
+            remainingSlots -= requiredSlots;
+        }
         blocks.push({ type: 'divider' });
-        const more = failures.length > MAX_FAILURES_IN_BLOCKS
-            ? ` (showing first ${MAX_FAILURES_IN_BLOCKS})`
+        const more = displayedFailures.length < failures.length
+            ? ` (showing first ${displayedFailures.length})`
             : '';
         blocks.push({
             type: 'section',
             text: { type: 'mrkdwn', text: `*Failures (${failures.length})*${more}` },
         });
-        for (const failure of failures.slice(0, MAX_FAILURES_IN_BLOCKS)) {
+        for (const failure of displayedFailures) {
             const name = sanitizeText(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
             const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
             const kind = failure.kind === 'error' ? 'ERROR' : 'FAIL';
@@ -367,6 +383,18 @@ function formatBlocks(report, metadata, reportError, secret = '') {
                     text: `*${kind} · ${name}*\n> ${detail || 'Reason unavailable in xUnit report.'}`,
                 },
             });
+            if (failure.values) {
+                const values = sanitizeCode(failure.values, secret);
+                const clipped = values.length > MAX_FAILURE_VALUES_LENGTH;
+                const preview = values.slice(0, MAX_FAILURE_VALUES_LENGTH);
+                blocks.push({
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `*Values*\n\`\`\`\n${preview}${clipped ? '\n… values truncated' : ''}\n\`\`\``,
+                    },
+                });
+            }
         }
     }
 
