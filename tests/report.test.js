@@ -191,12 +191,14 @@ test('shows the exact failing test and both xUnit reason fields in the dashboard
     );
     assert.match(rendered, /\*FAIL · #4 integration › Users › getUsersOfGroup/);
     assert.match(rendered, /> Did not match snapshot/);
-    const valuesBlock = blocks.find((block) => block.type === 'section'
-        && block.text && block.text.text.startsWith('*Values*'));
-    assert.ok(valuesBlock);
-    assert.match(valuesBlock.text.text, /```[\s\S]*\+\s+\{/);
-    assert.match(valuesBlock.text.text, /averageRating: null/);
-    assert.doesNotMatch(blocks[5].text.text, /Values/);
+    const detailsBlock = blocks.find((block) => block.type === 'container');
+    assert.ok(detailsBlock);
+    assert.equal(detailsBlock.title.text, 'Details');
+    assert.equal(detailsBlock.is_collapsible, true);
+    assert.equal(detailsBlock.default_collapsed, true);
+    assert.match(detailsBlock.child_blocks[0].text.text, /```[\s\S]*\+\s+\{/);
+    assert.match(detailsBlock.child_blocks[0].text.text, /averageRating: null/);
+    assert.doesNotMatch(blocks[5].text.text, /Details/);
     assert.match(rendered, /\*FAIL · #20 integration › UseCases/);
     assert.ok(blocks.findIndex((block) => block.type === 'divider')
         > blocks.findIndex((block) => block.type === 'context'));
