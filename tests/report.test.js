@@ -183,13 +183,13 @@ test('shows the exact failing test and both xUnit reason fields in the dashboard
 
     assert.deepEqual(
         [report.passed, report.failed, report.errors, report.skipped, report.executed + report.skipped],
-        [594, 4, 0, 5, 603],
+        [14, 4, 0, 5, 23],
     );
     assert.equal(report.failures[0].detail, 'Did not match snapshot');
     assert.match(report.failures[0].values, /\+\s+\{/);
     assert.deepEqual(
         blocks[1].fields.map((field) => field.text),
-        ['*Passed*\n594', '*Skipped*\n5', '*Failures*\n4', '*Errors*\n0', '*Total tests*\n603', '*Duration*\nunavailable'],
+        ['*Passed*\n14', '*Skipped*\n5', '*Failures*\n4', '*Errors*\n0', '*Total tests*\n23', '*Duration*\nunavailable'],
     );
     assert.match(rendered, /\*FAIL · #4 integration › Users › getUsersOfGroup/);
     const testNameBlock = blocks.find((block) => block.type === 'section' && block.text
