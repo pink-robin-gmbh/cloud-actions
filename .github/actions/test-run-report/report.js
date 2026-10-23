@@ -3,7 +3,6 @@ const { XMLParser, XMLValidator } = require('fast-xml-parser');
 
 const MAX_MESSAGE_LENGTH = 11000;
 const MAX_FAILURE_DETAIL_LENGTH = 900;
-const MAX_FAILURE_VALUES_LENGTH = 2400;
 const MAX_FAILURE_NAME_LENGTH = 180;
 const MAX_FAILURES_IN_BLOCKS = 43;
 
@@ -67,14 +66,39 @@ function scalarText(value) {
     const body = lines.find((line) => /^message:\s*/i.test(line))
         || lines.find((line) => !/^(?:---|\.\.\.|name:|assertion:|values:)/i.test(line))
         || '';
-    const detail = body.replace(/^message:\s*/i, '');
-    return [message, detail && detail !== message ? detail : ''].filter(Boolean).join(' — ');
+    const detail = body.replace(/^message:\s*/i, '').trim();
+    const valuesLine = lines.find((line) => /^values:\s*/i.test(line));
+    let values = '';
+    if (valuesLine) {
+        try {
+            const parsed = JSON.parse(valuesLine.replace(/^values:\s*/i, ''));
+            values = Object.entries(parsed).map(([name, value]) => {
+                const label = name.replace(/:\s*$/, '');
+                if (typeof value !== 'string') return `${label}: ${JSON.stringify(value)}`;
+                const changes = value.split(/\r?\n/)
+                    .map((line) => line.trim())
+                    .map((line) => line.match(/^([+-])\s*(.+)$/))
+                    .filter((match) => match && !/^[{}[\],]+$/.test(match[2]));
+                if (!changes.length) return `${label}: ${value.replace(/\s+/g, ' ').trim()}`;
+                const shown = changes.slice(0, 5)
+                    .map(([, sign, text]) => `${sign} ${text.replace(/,\s*$/, '')}`);
+                const omitted = changes.length - shown.length;
+                return `${label}: ${shown.join('; ')}${omitted ? `; … ${omitted} more changes` : ''}`;
+            }).join(' · ');
+        } catch {
+            values = valuesLine.replace(/^values:\s*/i, '');
+        }
+    }
+    return [message, detail && detail !== message ? detail : '', values ? `Values: ${values}` : '']
+        .filter(Boolean).join(' — ');
 }
 
 function failureDetail(testCase) {
     for (const kind of ['failure', 'error']) {
         if (Object.prototype.hasOwnProperty.call(testCase, kind)) {
-            return scalarText(testCase[kind]);
+            const detail = testCase[kind];
+            const text = scalarText(detail);
+            return text;
         }
     }
     return { detail: '', values: '' };

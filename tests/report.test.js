@@ -189,6 +189,8 @@ test('shows the exact failing test and both xUnit reason fields in the dashboard
     );
     assert.match(rendered, /\*FAIL · #4 integration › Users › getUsersOfGroup/);
     assert.match(rendered, /> Did not match snapshot/);
+    assert.match(rendered, /Values: Difference: \+ averageRating: null; \+ companyName: 'Smart Services Partner'/);
+    assert.match(rendered, /more changes/);
     assert.match(rendered, /\*FAIL · #20 integration › UseCases/);
     assert.ok(blocks.findIndex((block) => block.type === 'divider')
         > blocks.findIndex((block) => block.type === 'context'));
