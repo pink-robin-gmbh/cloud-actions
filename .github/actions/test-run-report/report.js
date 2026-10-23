@@ -388,11 +388,17 @@ function formatBlocks(report, metadata, reportError, secret = '') {
                 const clipped = values.length > MAX_FAILURE_VALUES_LENGTH;
                 const preview = values.slice(0, MAX_FAILURE_VALUES_LENGTH);
                 blocks.push({
-                    type: 'section',
-                    text: {
-                        type: 'mrkdwn',
-                        text: `*Values*\n\`\`\`\n${preview}${clipped ? '\n… values truncated' : ''}\n\`\`\``,
-                    },
+                    type: 'container',
+                    title: { type: 'plain_text', text: 'Details' },
+                    is_collapsible: true,
+                    default_collapsed: true,
+                    child_blocks: [{
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: `\`\`\`\n${preview}${clipped ? '\n… details truncated' : ''}\n\`\`\``,
+                        },
+                    }],
                 });
             }
         }
