@@ -158,7 +158,7 @@ test('formats a Block Kit summary with metrics, failure details, and safe link b
     assert.doesNotMatch(JSON.stringify(blocks), /✅|❌|⚪|💤|🔥|🧪|⏱/);
     assert.deepEqual(
         blocks[1].fields.map((field) => field.text),
-        ['*Passed*\n`2`', '*Skipped*\n`1`', '*Failed*\n`1`', '*Errors*\n`0`', '*Total tests*\n`4`', '*Duration*\n`1m 2s`'],
+        ['*Passed*\n2', '*Skipped*\n1', '*Failures*\n1', '*Errors*\n0', '*Total tests*\n4', '*Duration*\n1m 2s'],
     );
     assert.equal(blocks[1].fields.every((field) => field.type === 'mrkdwn'), true);
     assert.match(JSON.stringify(blocks), /test \[at\]here \[star\]notify\[star\]/);
@@ -182,7 +182,7 @@ test('shows the exact failing test and both xUnit reason fields in the dashboard
 
     assert.deepEqual(
         blocks[1].fields.map((field) => field.text),
-        ['*Passed*\n`2`', '*Skipped*\n`1`', '*Failed*\n`1`', '*Errors*\n`1`', '*Total tests*\n`5`', '*Duration*\n`43s`'],
+        ['*Passed*\n2', '*Skipped*\n1', '*Failures*\n2', '*Errors*\n1', '*Total tests*\n5', '*Duration*\n43s'],
     );
     assert.match(rendered, /\*FAIL · integration\.orders: rejects invalid delivery date\*/);
     assert.match(rendered, /> expected HTTP 400, got 500 — Expected validation error was not returned/);

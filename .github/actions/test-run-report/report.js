@@ -311,14 +311,14 @@ function formatBlocks(report, metadata, reportError, secret = '') {
         const metrics = [
             ['Passed', report.passed],
             ['Skipped', report.skipped],
-            ['Failed', report.failed - errors],
+            ['Failures', report.failed],
             ['Errors', errors],
             ['Total tests', report.executed + report.skipped],
             ['Duration', formatDuration(report.durationSeconds)],
         ];
         blocks.push({
             type: 'section',
-            fields: metrics.map(([name, value]) => ({ type: 'mrkdwn', text: `*${name}*\n\`${value}\`` })),
+            fields: metrics.map(([name, value]) => ({ type: 'mrkdwn', text: `*${name}*\n${value}` })),
         });
     }
 
