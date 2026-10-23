@@ -8,6 +8,7 @@ const {
     MAX_MESSAGE_LENGTH,
     ReportError,
     formatBlocks,
+    formatFailureDetails,
     formatMessage,
     main,
     parseReport,
@@ -190,19 +191,13 @@ test('shows the exact failing test and both xUnit reason fields in the dashboard
         ['*Passed*\n594', '*Skipped*\n5', '*Failures*\n4', '*Errors*\n0', '*Total tests*\n603', '*Duration*\nunavailable'],
     );
     assert.match(rendered, /\*FAIL · #4 integration › Users › getUsersOfGroup/);
-    const testNameBlock = blocks.find((block) => block.type === 'container'
-        && block.child_blocks.some((child) => child.text.text.includes('#20 integration')));
+    const testNameBlock = blocks.find((block) => block.type === 'section' && block.text
+        && block.text.text.includes('#20 integration'));
     assert.ok(testNameBlock);
-    assert.equal(testNameBlock.title.text, 'Failure details (4)');
-    assert.match(testNameBlock.child_blocks[2].text.text, /order_complete/);
-    assert.doesNotMatch(testNameBlock.child_blocks[2].text.text, /\\_/);
-    assert.equal(testNameBlock.width, 'full');
-    assert.equal(testNameBlock.is_collapsible, true);
-    assert.equal(testNameBlock.default_collapsed, true);
-    assert.match(testNameBlock.child_blocks[0].text.text, /#4 integration[\s\S]*Did not match snapshot/);
-    assert.match(testNameBlock.child_blocks[1].text.text, /```[\s\S]*\+\s+\{/);
-    assert.match(testNameBlock.child_blocks[1].text.text, /averageRating: null/);
-    assert.match(rendered, /FAIL · #20 integration › UseCases/);
+    assert.match(testNameBlock.text.text, /order_complete/);
+    assert.doesNotMatch(testNameBlock.text.text, /\\_/);
+    assert.equal(blocks.some((block) => block.type === 'container'), false);
+    assert.match(rendered, /\*FAIL · #20 integration › UseCases/);
     assert.ok(blocks.findIndex((block) => block.type === 'divider')
         > blocks.findIndex((block) => block.type === 'context'));
 });
@@ -224,17 +219,19 @@ test('bounds Block Kit failure details and omits unsafe links', () => {
         ...metadata,
         runUrl: `https://example.com/${'ø'.repeat(800)}`,
     });
-    const valuesBlocks = formatBlocks({
-        ...report,
-        failures: report.failures.map((failure) => ({ ...failure, values: 'expected\\n- old\\n+ new' })),
-    }, metadata);
+    const detailsBlocks = formatFailureDetails({
+        failures: Array.from({ length: 80 }, (_, index) => ({
+            name: `test-${index}`,
+            detail: 'failure detail',
+            values: 'expected\n- old\n+ new',
+        })),
+    });
 
     assert.ok(blocks.length <= 50);
-    assert.ok(valuesBlocks.length <= 50);
-    assert.match(valuesBlocks[4].text.text, /showing first 43/);
+    assert.ok(detailsBlocks.length <= 50);
+    assert.equal(detailsBlocks[0].text.text, '*Failure details (80)*');
+    assert.match(detailsBlocks.at(-1).text.text, /56 more failure diffs omitted/);
     assert.match(blocks[4].text.text, /showing first 43/);
-    assert.equal(valuesBlocks.filter((block) => block.type === 'container').length, 1);
-    assert.equal(valuesBlocks.find((block) => block.type === 'container').child_blocks.length, 9);
     assert.equal(blocks.filter((block) => block.type === 'container').length, 0);
     assert.equal(blocks[2].type, 'context');
     assert.equal(oversizedUrlBlocks[2].type, 'context');
@@ -311,9 +308,12 @@ test('posts a Slack message with token only in the authorization header', async 
         assert.doesNotMatch(options.body, /xoxb-secret-token/);
         assert.equal(payload.mrkdwn, false);
         assert.deepEqual(payload.blocks, [{ type: 'header' }]);
-        return { ok: true, json: async () => ({ ok: true }) };
+        return { ok: true, json: async () => ({ ok: true, ts: '123.456' }) };
     }, async () => {
-        await sendMessage('C123', 'xoxb-secret-token', 'Test summary', [{ type: 'header' }]);
+        assert.equal(
+            await sendMessage('C123', 'xoxb-secret-token', 'Test summary', [{ type: 'header' }]),
+            '123.456',
+        );
     });
 });
 
@@ -373,11 +373,12 @@ test('posts an unavailable-report warning without fabricated counts', async () =
     assert.ok(logs.every((line) => !line.includes('bot-secret')));
 });
 
-test('posts one dashboard card by default', async () => {
+test('posts the summary and failure diffs in a thread', async () => {
     const messages = [];
     await withMockFetch(async (_url, options) => {
         messages.push(JSON.parse(options.body));
-        return { ok: true, json: async () => ({ ok: true }) };
+        const ts = messages.length === 1 ? '123.456' : '123.789';
+        return { ok: true, json: async () => ({ ok: true, ts }) };
     }, async () => {
         const result = await main({
             REPORT_PATH: path.join(fixturesPath, 'slack-report.xml'),
@@ -393,9 +394,14 @@ test('posts one dashboard card by default', async () => {
         assert.equal(result, 0);
     });
 
-    assert.equal(messages.length, 1);
+    assert.equal(messages.length, 2);
     assert.match(messages[0].blocks[0].text.text, /FAILURE · Integration tests/);
     assert.match(JSON.stringify(messages[0].blocks), /Failures \(4\)/);
+    assert.equal(messages[0].blocks.some((block) => block.type === 'container'), false);
+    assert.equal(messages[1].thread_ts, '123.456');
+    assert.equal(messages[1].reply_broadcast, undefined);
+    assert.match(messages[1].text, /Failure details for Integration tests/);
+    assert.match(JSON.stringify(messages[1].blocks), /averageRating: null/);
 });
 
 test('writes a sanitized warning when Slack rejects a valid report', async () => {
