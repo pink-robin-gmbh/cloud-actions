@@ -300,6 +300,14 @@ function formatBlocks(report, metadata, reportError, secret = '') {
         },
     }];
 
+    const branch = sanitizeText(metadata.branch, secret).slice(0, 300) || 'unknown';
+    const commit = sanitizeText(metadata.commit, secret).slice(0, 40) || 'unknown';
+    const context = [{ type: 'plain_text', text: `Branch: ${branch} · Commit: ${commit}` }];
+    if (metadata.eventName === 'workflow_dispatch') {
+        context.push({ type: 'plain_text', text: 'Manual run' });
+    }
+    blocks.push({ type: 'context', elements: context });
+
     if (reportError) {
         blocks.push({
             type: 'section',
@@ -349,14 +357,6 @@ function formatBlocks(report, metadata, reportError, secret = '') {
             });
         }
     }
-
-    const branch = sanitizeText(metadata.branch, secret).slice(0, 300) || 'unknown';
-    const commit = sanitizeText(metadata.commit, secret).slice(0, 40) || 'unknown';
-    const context = [{ type: 'plain_text', text: `Branch: ${branch} · Commit: ${commit}` }];
-    if (metadata.eventName === 'workflow_dispatch') {
-        context.push({ type: 'plain_text', text: 'Manual run' });
-    }
-    blocks.push({ type: 'context', elements: context });
 
     const buttons = [];
     const runUrl = blockLink(metadata.runUrl, secret);
