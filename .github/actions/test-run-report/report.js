@@ -197,8 +197,8 @@ function sanitizeText(value, secret = '') {
         .replace(/~/g, '-');
 }
 
-function sanitizeTestName(value, secret = '', markdown = false) {
-    return sanitizeText(value, secret).replace(/\[underscore\]/g, markdown ? '\\_' : '_');
+function sanitizeTestName(value, secret = '') {
+    return sanitizeText(value, secret).replace(/\[underscore\]/g, '_');
 }
 
 function sanitizeCode(value, secret = '') {
@@ -360,14 +360,7 @@ function formatBlocks(report, metadata, reportError, secret = '') {
     );
     if (failures.length) {
         const availableSlots = 50 - blocks.length - 2 - (hasActions ? 1 : 0);
-        const displayedFailures = [];
-        let remainingSlots = availableSlots;
-        for (const failure of failures.slice(0, MAX_FAILURES_IN_BLOCKS)) {
-            const requiredSlots = failure.values ? 2 : 1;
-            if (requiredSlots > remainingSlots) break;
-            displayedFailures.push(failure);
-            remainingSlots -= requiredSlots;
-        }
+        const displayedFailures = failures.slice(0, Math.min(MAX_FAILURES_IN_BLOCKS, availableSlots));
         blocks.push({ type: 'divider' });
         const more = displayedFailures.length < failures.length
             ? ` (showing first ${displayedFailures.length})`
@@ -377,39 +370,40 @@ function formatBlocks(report, metadata, reportError, secret = '') {
             text: { type: 'mrkdwn', text: `*Failures (${failures.length})*${more}` },
         });
         for (const failure of displayedFailures) {
-            const name = sanitizeTestName(failure.name, secret, true)
-                .slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
+            const fullName = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH)
+                || 'unnamed test';
             const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
             const kind = failure.kind === 'error' ? 'ERROR' : 'FAIL';
-            blocks.push({
+            const childBlocks = [{
                 type: 'section',
                 text: {
-                    type: 'mrkdwn',
-                    text: `*${kind} · ${name}*\n> ${detail || 'Reason unavailable in xUnit report.'}`,
+                    type: 'plain_text',
+                    text: `Test: ${fullName}\nReason: ${detail || 'Reason unavailable in xUnit report.'}`,
                 },
-            });
+            }];
             if (failure.values) {
                 const values = sanitizeCode(failure.values, secret);
                 const clipped = values.length > MAX_FAILURE_VALUES_LENGTH;
                 const preview = values.slice(0, MAX_FAILURE_VALUES_LENGTH);
-                const testId = (failure.name.match(/#\d+/) || [''])[0];
-                blocks.push({
-                    type: 'container',
-                    title: {
-                        type: 'plain_text',
-                        text: `Details${testId ? ` · ${testId}` : ''}`,
+                childBlocks.push({
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `\`\`\`\n${preview}${clipped ? '\n… details truncated' : ''}\n\`\`\``,
                     },
-                    is_collapsible: true,
-                    default_collapsed: true,
-                    child_blocks: [{
-                        type: 'section',
-                        text: {
-                            type: 'mrkdwn',
-                            text: `\`\`\`\n${preview}${clipped ? '\n… details truncated' : ''}\n\`\`\``,
-                        },
-                    }],
                 });
             }
+            blocks.push({
+                type: 'container',
+                title: {
+                    type: 'plain_text',
+                    text: `${kind} · ${fullName}`.slice(0, 150),
+                },
+                width: 'full',
+                is_collapsible: true,
+                default_collapsed: true,
+                child_blocks: childBlocks,
+            });
         }
     }
 
