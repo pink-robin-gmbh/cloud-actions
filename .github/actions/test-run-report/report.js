@@ -409,10 +409,7 @@ function formatBlocks(report, metadata, reportError, secret = '') {
             url: artifactUrl,
         });
     }
-    if (buttons.length) {
-        blocks.push({ type: 'divider' });
-        blocks.push({ type: 'actions', elements: buttons });
-    }
+    if (buttons.length) blocks.push({ type: 'actions', elements: buttons });
 
     return blocks;
 }
