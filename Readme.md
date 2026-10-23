@@ -22,10 +22,6 @@ fallback is included for notifications. Set `SLACK_BOT_TOKEN`
 (with `chat:write` access) as a secret and `SLACK_CHANNEL_ID` as a repository
 variable.
 
-Failure details include assertion type, source location, and a short summary of
-changed snapshot fields without their values; use the linked report artifact for
-the complete diff.
-
 The manually triggered `Test Slack report formatting` workflow posts the
 attached-report fixture with 603 test cases (594 passed, 4 failed, and 5
 skipped) to preview the dashboard with representative results.
