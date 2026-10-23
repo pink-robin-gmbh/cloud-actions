@@ -212,18 +212,21 @@ test('bounds Block Kit failure details and omits unsafe links', () => {
     assert.equal(oversizedUrlBlocks.some((block) => block.type === 'actions'), false);
 });
 
-test('includes manual run overrides without inventing counts for unavailable reports', () => {
+test('shows manual run without overrides or invented counts for unavailable reports', () => {
     const manual = {
         ...metadata,
         eventName: 'workflow_dispatch',
         manualContext: 'VersionCore=develop; SkipDeploy=true',
     };
     const message = formatMessage(null, manual, 'report missing');
+    const blocks = formatBlocks(null, manual, 'report missing');
 
     assert.match(message, /Manual run/);
-    assert.match(message, /VersionCore=develop; SkipDeploy=true/);
+    assert.doesNotMatch(message, /Overrides:|VersionCore=develop|SkipDeploy=true/);
     assert.match(message, /Test report unavailable: report missing/);
     assert.doesNotMatch(message, /0 executed/);
+    assert.match(JSON.stringify(blocks), /Manual run/);
+    assert.doesNotMatch(JSON.stringify(blocks), /Overrides:|VersionCore=develop|SkipDeploy=true/);
 });
 
 test('sanitizes mentions, formatting, and credential-like failure details', () => {
