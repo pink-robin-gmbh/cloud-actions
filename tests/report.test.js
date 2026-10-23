@@ -173,6 +173,7 @@ test('formats a Block Kit summary with metrics, failure details, and safe link b
         'Open workflow run',
     ]);
     assert.equal(blocks.at(-1).elements[0].url, metadata.runUrl);
+    assert.equal(blocks.at(-2).type, 'divider');
 });
 
 test('shows the exact failing test and both xUnit reason fields in the dashboard', () => {
@@ -196,7 +197,12 @@ test('shows the exact failing test and both xUnit reason fields in the dashboard
     assert.ok(testNameBlock);
     assert.match(testNameBlock.text.text, /order_complete/);
     assert.doesNotMatch(testNameBlock.text.text, /\\_/);
-    assert.equal(blocks.some((block) => block.type === 'container'), false);
+    const details = blocks.find((block) => block.type === 'container');
+    assert.ok(details);
+    assert.equal(details.title.text, 'Expand for failure details');
+    assert.equal(details.is_collapsible, true);
+    assert.equal(details.default_collapsed, true);
+    assert.ok(details.child_blocks.some((block) => block.text.text.includes('averageRating: null')));
     assert.match(rendered, /\*FAIL · #20 integration › UseCases/);
     assert.ok(blocks.findIndex((block) => block.type === 'divider')
         > blocks.findIndex((block) => block.type === 'context'));
@@ -223,20 +229,22 @@ test('bounds Block Kit failure details and omits unsafe links', () => {
         failures: Array.from({ length: 80 }, (_, index) => ({
             name: `test-${index}`,
             detail: 'failure detail',
-            values: 'expected\n- old\n+ new',
+            values: 'x'.repeat(5000),
         })),
     });
 
     assert.ok(blocks.length <= 50);
-    assert.ok(detailsBlocks.length <= 50);
-    assert.equal(detailsBlocks.filter((block) => block.type === 'container').length, 24);
-    assert.equal(detailsBlocks[0].title.text, 'FAIL · test-0');
+    assert.equal(detailsBlocks.length, 1);
+    assert.equal(detailsBlocks[0].title.text, 'Expand for failure details');
     assert.equal(detailsBlocks[0].width, 'full');
     assert.equal(detailsBlocks[0].is_collapsible, true);
     assert.equal(detailsBlocks[0].default_collapsed, true);
-    assert.match(detailsBlocks.at(-1).text.text, /56 more failures omitted/);
+    assert.equal(detailsBlocks[0].child_blocks.length, 10);
+    assert.ok(detailsBlocks[0].child_blocks.every((block) => block.text.text.length <= 3000));
+    assert.match(detailsBlocks[0].child_blocks[0].text.text, /details truncated/);
+    assert.match(detailsBlocks[0].child_blocks.at(-1).text.text, /71 more failures omitted/);
     assert.match(blocks[4].text.text, /showing first 43/);
-    assert.equal(blocks.filter((block) => block.type === 'container').length, 0);
+    assert.equal(blocks.filter((block) => block.type === 'container').length, 1);
     assert.equal(blocks[2].type, 'context');
     assert.equal(oversizedUrlBlocks[2].type, 'context');
     assert.equal(blocks.some((block) => block.type === 'actions'), false);
@@ -377,12 +385,11 @@ test('posts an unavailable-report warning without fabricated counts', async () =
     assert.ok(logs.every((line) => !line.includes('bot-secret')));
 });
 
-test('posts the summary and failure diffs in a thread', async () => {
+test('posts the summary with one collapsible box containing failure details', async () => {
     const messages = [];
     await withMockFetch(async (_url, options) => {
         messages.push(JSON.parse(options.body));
-        const ts = messages.length === 1 ? '123.456' : '123.789';
-        return { ok: true, json: async () => ({ ok: true, ts }) };
+        return { ok: true, json: async () => ({ ok: true, ts: '123.456' }) };
     }, async () => {
         const result = await main({
             REPORT_PATH: path.join(fixturesPath, 'slack-report.xml'),
@@ -398,20 +405,22 @@ test('posts the summary and failure diffs in a thread', async () => {
         assert.equal(result, 0);
     });
 
-    assert.equal(messages.length, 2);
+    assert.equal(messages.length, 1);
     assert.match(messages[0].blocks[0].text.text, /FAILURE · Integration tests/);
     assert.match(JSON.stringify(messages[0].blocks), /Failures \(4\)/);
-    assert.equal(messages[0].blocks.some((block) => block.type === 'container'), false);
-    assert.equal(messages[1].thread_ts, '123.456');
-    assert.equal(messages[1].reply_broadcast, undefined);
-    assert.match(messages[1].text, /Failure details for Integration tests/);
-    assert.match(JSON.stringify(messages[1].blocks), /averageRating: null/);
-    const failureCards = messages[1].blocks.filter((block) => block.type === 'container');
-    assert.equal(failureCards.length, 4);
-    assert.ok(failureCards.every((block) => block.is_collapsible && block.default_collapsed));
-    assert.match(failureCards[0].title.text, /#4 integration/);
-    assert.match(failureCards[0].child_blocks[0].text.text, /Did not match snapshot/);
-    assert.match(failureCards[0].child_blocks[1].text.text, /averageRating: null/);
+    const failureDetails = messages[0].blocks.find((block) => block.type === 'container');
+    assert.ok(failureDetails);
+    assert.equal(failureDetails.title.text, 'Expand for failure details');
+    assert.equal(failureDetails.is_collapsible && failureDetails.default_collapsed, true);
+    assert.ok(failureDetails.child_blocks.length <= 10);
+    const renderedDetails = JSON.stringify(failureDetails.child_blocks);
+    assert.match(renderedDetails, /#4 integration/);
+    assert.match(renderedDetails, /\*Did not match snapshot\*/);
+    assert.match(renderedDetails, /averageRating: null/);
+    assert.match(renderedDetails, /#20 integration/);
+    assert.equal(messages[0].blocks.at(-2).type, 'divider');
+    assert.equal(messages[0].blocks.at(-1).type, 'actions');
+    assert.equal(messages[0].thread_ts, undefined);
 });
 
 test('writes a sanitized warning when Slack rejects a valid report', async () => {

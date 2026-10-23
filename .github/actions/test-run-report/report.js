@@ -6,7 +6,8 @@ const MAX_FAILURE_DETAIL_LENGTH = 900;
 const MAX_FAILURE_VALUES_LENGTH = 2400;
 const MAX_FAILURE_NAME_LENGTH = 180;
 const MAX_FAILURES_IN_BLOCKS = 43;
-const MAX_FAILURES_IN_THREAD = 24;
+const MAX_BLOCK_TEXT_LENGTH = 3000;
+const MAX_CONTAINER_CHILD_BLOCKS = 10;
 
 const CREDENTIAL_PATTERNS = [
     /\b[A-Z0-9_-]*(?:AUTHORIZATION|PASSWORD|PASSWD|SECRET|TOKEN|API[_-]?KEY|CLIENT[_-]?SECRET)[A-Z0-9_-]*\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^,\s"'<>]+)/gi,
@@ -360,7 +361,10 @@ function formatBlocks(report, metadata, reportError, secret = '') {
         blockLink(metadata.runUrl, secret) || blockLink(metadata.artifactUrl, secret),
     );
     if (failures.length) {
-        const availableSlots = 50 - blocks.length - 2 - (hasActions ? 1 : 0);
+        const availableSlots = Math.max(
+            0,
+            50 - blocks.length - 2 - (hasActions ? 2 : 0) - 2,
+        );
         const displayedFailures = failures.slice(0, Math.min(MAX_FAILURES_IN_BLOCKS, availableSlots));
         blocks.push({ type: 'divider' });
         const more = displayedFailures.length < failures.length
@@ -383,6 +387,7 @@ function formatBlocks(report, metadata, reportError, secret = '') {
                 },
             });
         }
+        blocks.push({ type: 'divider' }, ...formatFailureDetails(report, secret));
     }
 
     const buttons = [];
@@ -404,7 +409,10 @@ function formatBlocks(report, metadata, reportError, secret = '') {
             url: artifactUrl,
         });
     }
-    if (buttons.length) blocks.push({ type: 'actions', elements: buttons });
+    if (buttons.length) {
+        blocks.push({ type: 'divider' });
+        blocks.push({ type: 'actions', elements: buttons });
+    }
 
     return blocks;
 }
@@ -413,52 +421,60 @@ function formatFailureDetails(report, secret = '') {
     const failures = report ? report.failures : [];
     if (!failures.length) return [];
 
-    const displayedFailures = failures.slice(0, MAX_FAILURES_IN_THREAD);
-    const blocks = [];
-    for (const failure of displayedFailures) {
+    const chunks = [];
+    let text = '';
+    let failureCount = 0;
+    for (const failure of failures) {
         const name = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH)
             || 'unnamed test';
         const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
-        const childBlocks = [{
-            type: 'section',
-            text: {
-                type: 'plain_text',
-                text: `${name}\n${detail || 'Reason unavailable in xUnit report.'}`,
-            },
-        }];
+        let failureText = `*${failure.kind === 'error' ? 'ERROR' : 'FAIL'} · ${name}*\n*${detail || 'Reason unavailable in xUnit report.'}*`;
         if (failure.values) {
             const values = sanitizeCode(failure.values, secret);
-            const clipped = values.length > MAX_FAILURE_VALUES_LENGTH;
-            childBlocks.push({
-                type: 'section',
-                text: {
-                    type: 'mrkdwn',
-                    text: `\`\`\`\n${values.slice(0, MAX_FAILURE_VALUES_LENGTH)}${clipped ? '\n… details truncated' : ''}\n\`\`\``,
-                },
-            });
+            const valueLimit = Math.min(
+                MAX_FAILURE_VALUES_LENGTH,
+                MAX_BLOCK_TEXT_LENGTH - failureText.length - 32,
+            );
+            const clipped = values.length > valueLimit;
+            failureText += `\n\`\`\`\n${values.slice(0, valueLimit)}${clipped ? '\n… details truncated' : ''}\n\`\`\``;
         }
-        blocks.push({
-            type: 'container',
-            title: {
-                type: 'plain_text',
-                text: `${failure.kind === 'error' ? 'ERROR' : 'FAIL'} · ${name}`.slice(0, 150),
-            },
-            width: 'full',
-            is_collapsible: true,
-            default_collapsed: true,
-            child_blocks: childBlocks,
-        });
+        const nextText = text ? `${text}\n\n${failureText}` : failureText;
+        if (nextText.length > MAX_BLOCK_TEXT_LENGTH) {
+            chunks.push({ text, failureCount });
+            text = failureText;
+            failureCount = 1;
+        } else {
+            text = nextText;
+            failureCount += 1;
+        }
     }
-    if (displayedFailures.length < failures.length) {
-        blocks.push({
+    if (text) chunks.push({ text, failureCount });
+
+    const displayedChunks = chunks.length > MAX_CONTAINER_CHILD_BLOCKS
+        ? chunks.slice(0, MAX_CONTAINER_CHILD_BLOCKS - 1)
+        : chunks;
+    const displayedFailures = displayedChunks.reduce((total, chunk) => total + chunk.failureCount, 0);
+    const childBlocks = displayedChunks.map((chunk) => ({
+        type: 'section',
+        text: { type: 'mrkdwn', text: chunk.text },
+    }));
+    if (displayedFailures < failures.length) {
+        childBlocks.push({
             type: 'section',
             text: {
                 type: 'plain_text',
-                text: `${failures.length - displayedFailures.length} more failures omitted`,
+                text: `${failures.length - displayedFailures} more failures omitted`,
             },
         });
     }
-    return blocks;
+    return [{
+        type: 'container',
+        title: { type: 'plain_text', text: 'Expand for failure details' },
+        width: 'full',
+        is_collapsible: true,
+        default_collapsed: true,
+        child_blocks: childBlocks,
+    }];
 }
 
 async function sendMessage(channel, token, message, blocks, threadTs) {
@@ -537,26 +553,15 @@ async function main(environment = process.env) {
     };
     const message = formatMessage(report, metadata, reportError, token);
     const blocks = formatBlocks(report, metadata, reportError, token);
-    const failureDetails = formatFailureDetails(report, token);
     const errors = [];
     if (reportError) errors.push(reportError);
     try {
-        const parentTs = await sendMessage(
+        await sendMessage(
             environment.SLACK_CHANNEL_ID || '',
             token,
             message,
             blocks,
         );
-        if (failureDetails.length) {
-            if (!parentTs) throw new Error('Slack did not return the parent message timestamp');
-            await sendMessage(
-                environment.SLACK_CHANNEL_ID || '',
-                token,
-                `Failure details for ${sanitizeText(metadata.workflow, token).slice(0, 300) || 'Test run'}`,
-                failureDetails,
-                parentTs,
-            );
-        }
     } catch (error) {
         errors.push(error.message);
     }
