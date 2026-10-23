@@ -6,7 +6,6 @@ const MAX_FAILURE_DETAIL_LENGTH = 900;
 const MAX_FAILURE_VALUES_LENGTH = 2400;
 const MAX_FAILURE_NAME_LENGTH = 180;
 const MAX_FAILURES_IN_BLOCKS = 43;
-const MAX_COMPACT_FAILURES = 5;
 
 const CREDENTIAL_PATTERNS = [
     /\b[A-Z0-9_-]*(?:AUTHORIZATION|PASSWORD|PASSWD|SECRET|TOKEN|API[_-]?KEY|CLIENT[_-]?SECRET)[A-Z0-9_-]*\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^,\s"'<>]+)/gi,
@@ -284,16 +283,15 @@ function blockLink(value, secret) {
     }
 }
 
-function formatBlocks(report, metadata, reportError, secret = '', layout = 'dashboard', label = '') {
+function formatBlocks(report, metadata, reportError, secret = '') {
     let outcome = sanitizeText(metadata.testOutcome, secret).toUpperCase() || 'UNKNOWN';
     if (report && report.failed) outcome = 'FAILURE';
     const workflow = sanitizeText(metadata.workflow, secret).slice(0, 300) || 'Test run';
-    const emoji = outcome === 'SUCCESS' ? '✅' : outcome === 'FAILURE' ? '❌' : '⚪';
     const blocks = [{
         type: 'header',
         text: {
             type: 'plain_text',
-            text: `${emoji} ${outcome} · ${workflow}${label ? ` · ${label}` : ''}`.slice(0, 150),
+            text: `${outcome} · ${workflow}`.slice(0, 150),
             emoji: true,
         },
     }];
@@ -306,84 +304,43 @@ function formatBlocks(report, metadata, reportError, secret = '', layout = 'dash
                 text: `Test report unavailable: ${sanitizeText(reportError, secret).slice(0, 400)}`,
             },
         });
-    } else if (layout === 'compact') {
-        blocks.push({
-            type: 'section',
-            text: {
-                type: 'plain_text',
-                text: `${report.executed} executed · ${report.passed} passed · ${report.failed} failed · `
-                    + `${report.skipped} skipped · ${formatDuration(report.durationSeconds)}`,
-            },
-        });
-    } else if (layout === 'failure-first' && report.failed) {
-        blocks.push({ type: 'divider' });
-        const more = report.failed > MAX_FAILURES_IN_BLOCKS
-            ? ` — showing first ${MAX_FAILURES_IN_BLOCKS}`
-            : '';
-        blocks.push({
-            type: 'section',
-            text: { type: 'plain_text', text: `Failures (${report.failed})${more}` },
-        });
-        for (const failure of report.failures.slice(0, MAX_FAILURES_IN_BLOCKS)) {
-            const name = sanitizeText(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
-            const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
-            blocks.push({
-                type: 'section',
-                text: { type: 'plain_text', text: `${name}${detail ? `\n${detail}` : ''}` },
-            });
-        }
     }
 
-    if (!reportError && layout !== 'compact') {
+    if (!reportError) {
         const errors = report.errors || 0;
+        const metrics = [
+            ['Passed', report.passed],
+            ['Skipped', report.skipped],
+            ['Failed', report.failed - errors],
+            ['Errors', errors],
+            ['Total tests', report.executed + report.skipped],
+            ['Duration', formatDuration(report.durationSeconds)],
+        ];
         blocks.push({
             type: 'section',
-            fields: [
-                { type: 'plain_text', text: `✔ Passed\n${report.passed}`, emoji: true },
-                { type: 'plain_text', text: `💤 Skipped\n${report.skipped}`, emoji: true },
-                { type: 'plain_text', text: `❌ Failed\n${report.failed - errors}`, emoji: true },
-                { type: 'plain_text', text: `🔥 Errors\n${errors}`, emoji: true },
-                { type: 'plain_text', text: `🧪 Total tests\n${report.executed + report.skipped}`, emoji: true },
-                { type: 'plain_text', text: `⏱ Duration\n${formatDuration(report.durationSeconds)}`, emoji: true },
-            ],
-        });
-    } else if (!reportError && layout === 'compact' && report.failed) {
-        const failures = report.failures.slice(0, MAX_COMPACT_FAILURES).map((failure) => {
-            const name = sanitizeText(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
-            const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
-            return `${name}${detail ? `: ${detail}` : ''}`;
-        });
-        const omitted = report.failed - failures.length;
-        blocks.push({
-            type: 'section',
-            text: {
-                type: 'plain_text',
-                text: `Failures:\n${failures.join('\n')}${omitted ? `\nOmitted failure details: ${omitted}` : ''}`
-                    .slice(0, 2900),
-            },
+            fields: metrics.map(([name, value]) => ({ type: 'mrkdwn', text: `*${name}*\n\`${value}\`` })),
         });
     }
 
     const failures = report ? report.failures : [];
-    if (layout === 'dashboard' && failures.length) {
+    if (failures.length) {
         blocks.push({ type: 'divider' });
         const more = failures.length > MAX_FAILURES_IN_BLOCKS
             ? ` (showing first ${MAX_FAILURES_IN_BLOCKS})`
             : '';
         blocks.push({
             type: 'section',
-            text: { type: 'plain_text', text: `Failures (${failures.length})${more}` },
+            text: { type: 'mrkdwn', text: `*Failures (${failures.length})*${more}` },
         });
         for (const failure of failures.slice(0, MAX_FAILURES_IN_BLOCKS)) {
             const name = sanitizeText(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
             const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
-            const emoji = failure.kind === 'error' ? '🔥' : '❌';
+            const kind = failure.kind === 'error' ? 'ERROR' : 'FAIL';
             blocks.push({
                 type: 'section',
                 text: {
-                    type: 'plain_text',
-                    text: `${emoji} ${name}\n↳ ${detail || 'Reason unavailable in xUnit report.'}`,
-                    emoji: true,
+                    type: 'mrkdwn',
+                    text: `*${kind} · ${name}*\n> ${detail || 'Reason unavailable in xUnit report.'}`,
                 },
             });
         }
@@ -398,8 +355,6 @@ function formatBlocks(report, metadata, reportError, secret = '', layout = 'dash
         if (manualContext) context.push({ type: 'plain_text', text: `Overrides: ${manualContext}` });
     }
     blocks.push({ type: 'context', elements: context });
-
-    if (label) blocks.push({ type: 'context', elements: [{ type: 'plain_text', text: `Preview: ${label}` }] });
 
     const buttons = [];
     const runUrl = blockLink(metadata.runUrl, secret);
@@ -499,28 +454,13 @@ async function main(environment = process.env) {
         testOutcome: environment.TEST_OUTCOME,
     };
     const message = formatMessage(report, metadata, reportError, token);
+    const blocks = formatBlocks(report, metadata, reportError, token);
     const errors = [];
     if (reportError) errors.push(reportError);
-    const selectedFormat = environment.REPORT_FORMAT || 'dashboard';
-    const formats = selectedFormat === 'compare'
-        ? [
-            ['compact', 'Compact'],
-            ['failure-first', 'Failure-first'],
-            ['dashboard', 'Dashboard card'],
-        ]
-        : [[selectedFormat, '']];
-    for (const [layout, label] of formats) {
-        const blocks = formatBlocks(report, metadata, reportError, token, layout, label);
-        try {
-            await sendMessage(
-                environment.SLACK_CHANNEL_ID || '',
-                token,
-                message,
-                blocks,
-            );
-        } catch (error) {
-            errors.push(error.message);
-        }
+    try {
+        await sendMessage(environment.SLACK_CHANNEL_ID || '', token, message, blocks);
+    } catch (error) {
+        errors.push(error.message);
     }
 
     if (errors.length) {

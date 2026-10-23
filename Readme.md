@@ -22,10 +22,6 @@ fallback is included for notifications. Set `SLACK_BOT_TOKEN`
 (with `chat:write` access) as a secret and `SLACK_CHANNEL_ID` as a repository
 variable.
 
-Set `format` to `compact`, `failure-first`, or `dashboard` to choose a layout.
-The sample workflow uses `compare` to post all three layouts for side-by-side
-review in Slack.
-
 ```yaml
 - name: Report test run to Slack
   if: always()
