@@ -229,8 +229,12 @@ test('bounds Block Kit failure details and omits unsafe links', () => {
 
     assert.ok(blocks.length <= 50);
     assert.ok(detailsBlocks.length <= 50);
-    assert.equal(detailsBlocks[0].text.text, '*Failure details (80)*');
-    assert.match(detailsBlocks.at(-1).text.text, /56 more failure diffs omitted/);
+    assert.equal(detailsBlocks.filter((block) => block.type === 'container').length, 24);
+    assert.equal(detailsBlocks[0].title.text, 'FAIL · test-0');
+    assert.equal(detailsBlocks[0].width, 'full');
+    assert.equal(detailsBlocks[0].is_collapsible, true);
+    assert.equal(detailsBlocks[0].default_collapsed, true);
+    assert.match(detailsBlocks.at(-1).text.text, /56 more failures omitted/);
     assert.match(blocks[4].text.text, /showing first 43/);
     assert.equal(blocks.filter((block) => block.type === 'container').length, 0);
     assert.equal(blocks[2].type, 'context');
@@ -402,6 +406,12 @@ test('posts the summary and failure diffs in a thread', async () => {
     assert.equal(messages[1].reply_broadcast, undefined);
     assert.match(messages[1].text, /Failure details for Integration tests/);
     assert.match(JSON.stringify(messages[1].blocks), /averageRating: null/);
+    const failureCards = messages[1].blocks.filter((block) => block.type === 'container');
+    assert.equal(failureCards.length, 4);
+    assert.ok(failureCards.every((block) => block.is_collapsible && block.default_collapsed));
+    assert.match(failureCards[0].title.text, /#4 integration/);
+    assert.match(failureCards[0].child_blocks[0].text.text, /Did not match snapshot/);
+    assert.match(failureCards[0].child_blocks[1].text.text, /averageRating: null/);
 });
 
 test('writes a sanitized warning when Slack rejects a valid report', async () => {

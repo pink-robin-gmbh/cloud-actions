@@ -410,32 +410,43 @@ function formatBlocks(report, metadata, reportError, secret = '') {
 }
 
 function formatFailureDetails(report, secret = '') {
-    const failures = (report ? report.failures : []).filter((failure) => failure.values);
+    const failures = report ? report.failures : [];
     if (!failures.length) return [];
 
     const displayedFailures = failures.slice(0, MAX_FAILURES_IN_THREAD);
-    const blocks = [{
-        type: 'section',
-        text: { type: 'mrkdwn', text: `*Failure details (${failures.length})*` },
-    }];
+    const blocks = [];
     for (const failure of displayedFailures) {
         const name = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH)
             || 'unnamed test';
         const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
-        const values = sanitizeCode(failure.values, secret);
-        const clipped = values.length > MAX_FAILURE_VALUES_LENGTH;
+        const childBlocks = [{
+            type: 'section',
+            text: {
+                type: 'plain_text',
+                text: `${name}\n${detail || 'Reason unavailable in xUnit report.'}`,
+            },
+        }];
+        if (failure.values) {
+            const values = sanitizeCode(failure.values, secret);
+            const clipped = values.length > MAX_FAILURE_VALUES_LENGTH;
+            childBlocks.push({
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text: `\`\`\`\n${values.slice(0, MAX_FAILURE_VALUES_LENGTH)}${clipped ? '\n… details truncated' : ''}\n\`\`\``,
+                },
+            });
+        }
         blocks.push({
-            type: 'section',
-            text: {
-                type: 'mrkdwn',
-                text: `*${failure.kind === 'error' ? 'ERROR' : 'FAIL'} · ${name}*\n> ${detail || 'Reason unavailable in xUnit report.'}`,
+            type: 'container',
+            title: {
+                type: 'plain_text',
+                text: `${failure.kind === 'error' ? 'ERROR' : 'FAIL'} · ${name}`.slice(0, 150),
             },
-        }, {
-            type: 'section',
-            text: {
-                type: 'mrkdwn',
-                text: `\`\`\`\n${values.slice(0, MAX_FAILURE_VALUES_LENGTH)}${clipped ? '\n… details truncated' : ''}\n\`\`\``,
-            },
+            width: 'full',
+            is_collapsible: true,
+            default_collapsed: true,
+            child_blocks: childBlocks,
         });
     }
     if (displayedFailures.length < failures.length) {
@@ -443,7 +454,7 @@ function formatFailureDetails(report, secret = '') {
             type: 'section',
             text: {
                 type: 'plain_text',
-                text: `${failures.length - displayedFailures.length} more failure diffs omitted`,
+                text: `${failures.length - displayedFailures.length} more failures omitted`,
             },
         });
     }
