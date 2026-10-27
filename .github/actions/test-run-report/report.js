@@ -5,9 +5,10 @@ const MAX_MESSAGE_LENGTH = 11000;
 const MAX_FAILURE_DETAIL_LENGTH = 900;
 const MAX_FAILURE_VALUES_LENGTH = 2400;
 const MAX_FAILURE_NAME_LENGTH = 180;
-const MAX_FAILURES_IN_BLOCKS = 43;
 const MAX_BLOCK_TEXT_LENGTH = 3000;
 const MAX_CONTAINER_CHILD_BLOCKS = 10;
+const MAX_RATE_LIMIT_RETRIES = 5;
+const SLACK_MESSAGE_INTERVAL_MS = 1050;
 
 const CREDENTIAL_PATTERNS = [
     /\b[A-Z0-9_-]*(?:AUTHORIZATION|PASSWORD|PASSWD|SECRET|TOKEN|API[_-]?KEY|CLIENT[_-]?SECRET)[A-Z0-9_-]*\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^,\s"'<>]+)/gi,
@@ -18,6 +19,17 @@ const CREDENTIAL_PATTERNS = [
 ];
 
 class ReportError extends Error {}
+
+let nextSlackMessageAt = 0;
+
+async function waitForSlackMessageSlot(notBefore = 0) {
+    const now = Date.now();
+    const scheduledAt = Math.max(now, nextSlackMessageAt, notBefore);
+    nextSlackMessageAt = scheduledAt + SLACK_MESSAGE_INTERVAL_MS;
+    if (scheduledAt > now) {
+        await new Promise((resolve) => setTimeout(resolve, scheduledAt - now));
+    }
+}
 
 const parser = new XMLParser({
     ignoreAttributes: false,
@@ -143,6 +155,7 @@ function parseReport(reportPath, elapsedSeconds) {
             if (hasError) errors += 1;
             failures.push({
                 name: `${className ? `${className}: ` : ''}${name}`,
+                testName: name,
                 kind: hasError ? 'error' : 'failure',
                 ...failureDetail(testCase),
             });
@@ -264,33 +277,7 @@ function formatMessage(report, metadata, reportError, secret = '') {
     const artifactUrl = sanitizeUrl(metadata.artifactUrl, secret);
     if (artifactUrl) lines.push(`Test artifact: ${artifactUrl}`);
 
-    const failures = report ? report.failures : [];
-    if (failures.length) lines.push('Failures:');
-    const rows = failures.map((failure) => {
-        const name = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
-        const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
-        return `- ${name}${detail ? `: ${detail}` : ''}`;
-    });
-
-    const render = (selectedRows) => {
-        const messageLines = [...lines, ...selectedRows];
-        const omitted = failures.length - selectedRows.length;
-        if (omitted) messageLines.push(`Omitted failure details: ${omitted}`);
-        return messageLines.join('\n');
-    };
-
-    const selected = [];
-    for (const row of rows) {
-        const candidate = [...selected, row];
-        if (render(candidate).length > MAX_MESSAGE_LENGTH) break;
-        selected.push(row);
-    }
-    let message = render(selected);
-    while (message.length > MAX_MESSAGE_LENGTH && selected.length) {
-        selected.pop();
-        message = render(selected);
-    }
-    return message.length > MAX_MESSAGE_LENGTH ? message.slice(0, MAX_MESSAGE_LENGTH) : message;
+    return lines.join('\n').slice(0, MAX_MESSAGE_LENGTH);
 }
 
 function blockLink(value, secret) {
@@ -356,40 +343,6 @@ function formatBlocks(report, metadata, reportError, secret = '') {
     }
     blocks.push({ type: 'context', elements: context });
 
-    const failures = report ? report.failures : [];
-    const hasActions = Boolean(
-        blockLink(metadata.runUrl, secret) || blockLink(metadata.artifactUrl, secret),
-    );
-    if (failures.length) {
-        const availableSlots = Math.max(
-            0,
-            50 - blocks.length - 2 - (hasActions ? 2 : 0) - 2,
-        );
-        const displayedFailures = failures.slice(0, Math.min(MAX_FAILURES_IN_BLOCKS, availableSlots));
-        blocks.push({ type: 'divider' });
-        const more = displayedFailures.length < failures.length
-            ? ` (showing first ${displayedFailures.length})`
-            : '';
-        blocks.push({
-            type: 'section',
-            text: { type: 'mrkdwn', text: `*Failures (${failures.length})*${more}` },
-        });
-        for (const failure of displayedFailures) {
-            const fullName = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH)
-                || 'unnamed test';
-            const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
-            const kind = failure.kind === 'error' ? 'ERROR' : 'FAIL';
-            blocks.push({
-                type: 'section',
-                text: {
-                    type: 'mrkdwn',
-                    text: `*${kind} · ${fullName}*\n> ${detail || 'Reason unavailable in xUnit report.'}`,
-                },
-            });
-        }
-        blocks.push(...formatFailureDetails(report, secret));
-    }
-
     const buttons = [];
     const runUrl = blockLink(metadata.runUrl, secret);
     const artifactUrl = blockLink(metadata.artifactUrl, secret);
@@ -414,7 +367,35 @@ function formatBlocks(report, metadata, reportError, secret = '') {
     return blocks;
 }
 
-function formatFailureDetails(report, secret = '') {
+function formatFailureMessage(failure, secret = '') {
+    const name = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH)
+        || 'unnamed test';
+    const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH)
+        || 'Reason unavailable in xUnit report.';
+    const kind = failure.kind === 'error' ? 'ERROR' : 'FAIL';
+    return `${kind} · ${name}\n${detail}`;
+}
+
+function formatFailureBlocks(failure, secret = '') {
+    const name = sanitizeTestName(failure.testName || failure.name, secret)
+        .split(' › ')
+        .at(-1)
+        .trim()
+        .slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
+    const [title] = formatFailureMessage(failure, secret).split('\n');
+    const [details] = formatFailureDetails({ failures: [failure] }, secret, 'Details', false);
+    details.title.text = title.slice(0, 150);
+    details.child_blocks.unshift({
+        type: 'section',
+        text: {
+            type: 'mrkdwn',
+            text: `\`${sanitizeCode(name, secret)}\``,
+        },
+    });
+    return [details];
+}
+
+function formatFailureDetails(report, secret = '', title = 'Expand for failure details', includeTestNames = true) {
     const failures = report ? report.failures : [];
     if (!failures.length) return [];
 
@@ -425,7 +406,9 @@ function formatFailureDetails(report, secret = '') {
         const name = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH)
             || 'unnamed test';
         const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
-        let failureText = `*${failure.kind === 'error' ? 'ERROR' : 'FAIL'} · ${name}*\n*${detail || 'Reason unavailable in xUnit report.'}*`;
+        let failureText = includeTestNames
+            ? `${failure.kind === 'error' ? 'ERROR' : 'FAIL'} · ${name}\n${detail || 'Reason unavailable in xUnit report.'}`
+            : detail || 'Reason unavailable in xUnit report.';
         if (failure.values) {
             const values = sanitizeCode(failure.values, secret);
             const valueLimit = Math.min(
@@ -466,7 +449,7 @@ function formatFailureDetails(report, secret = '') {
     }
     return [{
         type: 'container',
-        title: { type: 'plain_text', text: 'Expand for failure details' },
+        title: { type: 'plain_text', text: title },
         width: 'full',
         is_collapsible: true,
         default_collapsed: true,
@@ -479,7 +462,11 @@ async function sendMessage(channel, token, message, blocks, threadTs) {
     if (!token) throw new Error('Slack bot token is not configured');
 
     let response;
-    try {
+    let rateLimitRetries = 0;
+    let retryNotBefore = 0;
+    while (true) {
+        await waitForSlackMessageSlot(retryNotBefore);
+        try {
         response = await fetch('https://slack.com/api/chat.postMessage', {
             method: 'POST',
             headers: {
@@ -491,12 +478,26 @@ async function sendMessage(channel, token, message, blocks, threadTs) {
                 text: message,
                 mrkdwn: false,
                 ...(blocks ? { blocks } : {}),
-                ...(threadTs ? { thread_ts: threadTs } : {}),
+                ...(threadTs ? { thread_ts: threadTs, reply_broadcast: false } : {}),
             }),
             signal: AbortSignal.timeout(20000),
         });
-    } catch {
-        throw new Error('Slack request could not be completed');
+        } catch {
+            throw new Error('Slack request could not be completed');
+        }
+        if (response.status !== 429) break;
+        if (rateLimitRetries >= MAX_RATE_LIMIT_RETRIES) {
+            throw new Error('Slack rate limit retry limit exceeded');
+        }
+        const retryAfterHeader = response.headers && response.headers.get('retry-after');
+        const retryAfter = Number(retryAfterHeader);
+        if (retryAfterHeader === null || retryAfterHeader === undefined
+            || String(retryAfterHeader).trim() === ''
+            || !Number.isFinite(retryAfter) || retryAfter < 0) {
+            throw new Error('Slack rate limit response did not include a valid Retry-After header');
+        }
+        retryNotBefore = Date.now() + retryAfter * 1000;
+        rateLimitRetries += 1;
     }
 
     if (!response.ok) throw new Error(`Slack API returned HTTP status ${response.status}`);
@@ -511,6 +512,9 @@ async function sendMessage(channel, token, message, blocks, threadTs) {
         const safeError = sanitizeText(result && result.error ? result.error : 'unspecified API error', token)
             .slice(0, 160);
         throw new Error(`Slack rejected the message: ${safeError}`);
+    }
+    if (typeof result.ts !== 'string' || !result.ts) {
+        throw new Error('Slack returned no message timestamp');
     }
     return result.ts;
 }
@@ -552,8 +556,9 @@ async function main(environment = process.env) {
     const blocks = formatBlocks(report, metadata, reportError, token);
     const errors = [];
     if (reportError) errors.push(reportError);
+    let threadTs;
     try {
-        await sendMessage(
+        threadTs = await sendMessage(
             environment.SLACK_CHANNEL_ID || '',
             token,
             message,
@@ -561,6 +566,22 @@ async function main(environment = process.env) {
         );
     } catch (error) {
         errors.push(error.message);
+    }
+
+    if (threadTs && report) {
+        for (const failure of report.failures) {
+            try {
+                await sendMessage(
+                    environment.SLACK_CHANNEL_ID || '',
+                    token,
+                    formatFailureMessage(failure, token),
+                    formatFailureBlocks(failure, token),
+                    threadTs,
+                );
+            } catch (error) {
+                errors.push(error.message);
+            }
+        }
     }
 
     if (errors.length) {
@@ -575,6 +596,8 @@ module.exports = {
     ReportError,
     formatMessage,
     formatBlocks,
+    formatFailureMessage,
+    formatFailureBlocks,
     formatFailureDetails,
     main,
     parseReport,
