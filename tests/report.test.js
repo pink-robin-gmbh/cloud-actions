@@ -203,19 +203,21 @@ test('formats individual failures with xUnit reason fields and UI error fallback
     assert.equal(failureBlocks.length, 1);
     const details = failureBlocks[0];
     assert.ok(details);
-    assert.equal(details.title.text, 'Expand for failure details');
+    assert.equal(details.title.text, 'FAIL · #4 integration › Users › getUsersOfGroup › /get users of group, no page and no page size');
     assert.equal(details.is_collapsible, true);
     assert.equal(details.default_collapsed, true);
     assert.ok(details.child_blocks.some((block) => block.text.text.includes('averageRating: null')));
-    assert.match(JSON.stringify(details), /\*FAIL · #4 integration › Users › getUsersOfGroup/);
+    assert.match(JSON.stringify(details), /FAIL · #4 integration › Users › getUsersOfGroup/);
+    assert.doesNotMatch(JSON.stringify(details), /\*FAIL|\*Did not match snapshot\*/);
     assert.match(formatFailureMessage(report.failures[0]), /^FAIL · #4 integration/);
 
     const uiReport = parseReport(path.join(fixturesPath, 'ui-report.xml'));
     const uiError = uiReport.failures.find(({ kind }) => kind === 'error');
     const uiBlocks = formatFailureBlocks(uiError);
-    assert.equal(uiBlocks[0].type, 'section');
-    assert.match(JSON.stringify(uiBlocks), /unavailable auth flow/);
+    assert.equal(uiBlocks[0].type, 'container');
+    assert.equal(uiBlocks[0].title.text, 'ERROR · ui.auth: unavailable auth flow');
     assert.match(JSON.stringify(uiBlocks), /browser timeout/);
+    assert.doesNotMatch(JSON.stringify(uiBlocks), /\*ERROR|\*browser timeout\*/);
 });
 
 test('bounds Block Kit failure details and omits unsafe links', () => {
@@ -466,12 +468,13 @@ test('posts the overview followed by ordered per-test replies in its thread', as
     );
     const failureDetails = messages[1].blocks.find((block) => block.type === 'container');
     assert.ok(failureDetails);
-    assert.equal(failureDetails.title.text, 'Expand for failure details');
+    assert.equal(failureDetails.title.text, 'FAIL · #4 integration › Users › getUsersOfGroup › /get users of group, no page and no page size');
     assert.equal(failureDetails.is_collapsible && failureDetails.default_collapsed, true);
     assert.ok(failureDetails.child_blocks.length <= 10);
     const renderedDetails = JSON.stringify(failureDetails.child_blocks);
     assert.match(renderedDetails, /#4 integration/);
-    assert.match(renderedDetails, /\*Did not match snapshot\*/);
+    assert.match(renderedDetails, /Did not match snapshot/);
+    assert.doesNotMatch(renderedDetails, /\*FAIL|\*Did not match snapshot\*/);
     assert.match(renderedDetails, /averageRating: null/);
     assert.match(messages[2].text, /#20 integration/);
     assert.match(messages[2].text, /order_complete/);

@@ -364,19 +364,11 @@ function formatFailureMessage(failure, secret = '') {
 }
 
 function formatFailureBlocks(failure, secret = '') {
-    if (failure.values) return formatFailureDetails({ failures: [failure] }, secret);
-
-    const [title, detail] = formatFailureMessage(failure, secret).split('\n');
-    return [{
-        type: 'section',
-        text: {
-            type: 'mrkdwn',
-            text: `*${title}*\n> ${detail}`,
-        },
-    }];
+    const [title] = formatFailureMessage(failure, secret).split('\n');
+    return formatFailureDetails({ failures: [failure] }, secret, title);
 }
 
-function formatFailureDetails(report, secret = '') {
+function formatFailureDetails(report, secret = '', title = 'Expand for failure details') {
     const failures = report ? report.failures : [];
     if (!failures.length) return [];
 
@@ -387,7 +379,7 @@ function formatFailureDetails(report, secret = '') {
         const name = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH)
             || 'unnamed test';
         const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
-        let failureText = `*${failure.kind === 'error' ? 'ERROR' : 'FAIL'} · ${name}*\n*${detail || 'Reason unavailable in xUnit report.'}*`;
+        let failureText = `${failure.kind === 'error' ? 'ERROR' : 'FAIL'} · ${name}\n${detail || 'Reason unavailable in xUnit report.'}`;
         if (failure.values) {
             const values = sanitizeCode(failure.values, secret);
             const valueLimit = Math.min(
@@ -428,7 +420,7 @@ function formatFailureDetails(report, secret = '') {
     }
     return [{
         type: 'container',
-        title: { type: 'plain_text', text: 'Expand for failure details' },
+        title: { type: 'plain_text', text: title },
         width: 'full',
         is_collapsible: true,
         default_collapsed: true,
