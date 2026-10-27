@@ -18,11 +18,11 @@ This library contains shared workflows for projects managed and build by Pink Ro
 
 Parses an xUnit report and posts a Block Kit overview with test metrics and
 links to the workflow run and report artifact. Each failed or errored test is
-then posted as a reply in the overview's thread, with a small test-name and run
-identifier above a collapsible `Details` box. Developers can discuss all
-failing tests in this single thread. Passing and skipped tests are counted in
-the overview but do not get individual replies. A plain-text fallback is
-included for notifications. Set `SLACK_BOT_TOKEN`
+then posted as a reply in the overview's thread, with only the test name in
+the plain-text collapsible content and the full failure title on the box.
+Developers can discuss all failing tests in this single thread. Passing and
+skipped tests are counted in the overview but do not get individual replies.
+A plain-text fallback is included for notifications. Set `SLACK_BOT_TOKEN`
 (with `chat:write` access) as a secret and `SLACK_CHANNEL_ID` as a repository
 variable.
 
