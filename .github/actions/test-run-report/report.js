@@ -380,7 +380,7 @@ function formatFailureBlocks(failure, secret = '') {
     const name = sanitizeTestName(failure.testName || failure.name, secret)
         .split(' › ')
         .at(-1)
-        .replace(/^[/\\\s]+/, '')
+        .trim()
         .slice(0, MAX_FAILURE_NAME_LENGTH) || 'unnamed test';
     const [title] = formatFailureMessage(failure, secret).split('\n');
     const [details] = formatFailureDetails({ failures: [failure] }, secret, 'Details', false);

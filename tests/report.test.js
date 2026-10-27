@@ -211,7 +211,7 @@ test('formats individual failures with xUnit reason fields and UI error fallback
     assert.equal(details.default_collapsed, true);
     assert.ok(details.child_blocks.some((block) => block.text.text.includes('averageRating: null')));
     assert.equal(details.child_blocks[0].text.type, 'mrkdwn');
-    assert.equal(details.child_blocks[0].text.text, '`get users of group, no page and no page size`');
+    assert.equal(details.child_blocks[0].text.text, '`/get users of group, no page and no page size`');
     assert.doesNotMatch(JSON.stringify(details.child_blocks), /FAIL · #4 integration/);
     assert.doesNotMatch(JSON.stringify(details), /\*Did not match snapshot\*/);
     assert.match(formatFailureMessage(report.failures[0]), /^FAIL · #4 integration/);
@@ -241,6 +241,20 @@ test('keeps the full title and puts only the copyable test name first in details
     assert.equal(blocks[0].child_blocks[0].text.type, 'mrkdwn');
     assert.equal(blocks[0].title.type, 'plain_text');
     assert.equal(blocks[0].type, 'container');
+});
+
+test('preserves leading slashes and sanitizes other name characters without dropping them', () => {
+    const blocks = formatFailureBlocks({
+        name: 'suite › /path/with_under-score*@example<test>~`case`',
+        testName: 'suite › /path/with_under-score*@example<test>~`case`',
+        kind: 'failure',
+        detail: 'assertion failed',
+    });
+
+    assert.equal(
+        blocks[0].child_blocks[0].text.text,
+        '`/path/with_under-score[star][at]example[lt]test[gt]-\'case\'`',
+    );
 });
 
 test('bounds Block Kit failure details and omits unsafe links', () => {
@@ -506,7 +520,7 @@ test('posts ordered test replies in the overview thread', async () => {
     assert.ok(failureDetails.child_blocks.length <= 10);
     const renderedDetails = JSON.stringify(failureDetails.child_blocks);
     assert.match(renderedDetails, /Did not match snapshot/);
-    assert.match(renderedDetails, /`get users of group, no page and no page size`/);
+    assert.match(renderedDetails, /`\/get users of group, no page and no page size`/);
     assert.doesNotMatch(renderedDetails, /FAIL · #4 integration|\*Did not match snapshot\*/);
     assert.match(renderedDetails, /averageRating: null/);
     assert.match(payloads[2].text, /#20 integration/);
