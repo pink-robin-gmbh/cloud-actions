@@ -387,7 +387,10 @@ function formatFailureBlocks(failure, secret = '') {
     details.title.text = title.slice(0, 150);
     details.child_blocks.unshift({
         type: 'section',
-        text: { type: 'plain_text', text: name },
+        text: {
+            type: 'mrkdwn',
+            text: `\`${sanitizeCode(name, secret)}\``,
+        },
     });
     return [details];
 }

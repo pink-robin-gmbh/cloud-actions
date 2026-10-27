@@ -210,8 +210,8 @@ test('formats individual failures with xUnit reason fields and UI error fallback
     assert.equal(details.is_collapsible, true);
     assert.equal(details.default_collapsed, true);
     assert.ok(details.child_blocks.some((block) => block.text.text.includes('averageRating: null')));
-    assert.equal(details.child_blocks[0].text.type, 'plain_text');
-    assert.equal(details.child_blocks[0].text.text, 'get users of group, no page and no page size');
+    assert.equal(details.child_blocks[0].text.type, 'mrkdwn');
+    assert.equal(details.child_blocks[0].text.text, '`get users of group, no page and no page size`');
     assert.doesNotMatch(JSON.stringify(details.child_blocks), /FAIL · #4 integration/);
     assert.doesNotMatch(JSON.stringify(details), /\*Did not match snapshot\*/);
     assert.match(formatFailureMessage(report.failures[0]), /^FAIL · #4 integration/);
@@ -221,7 +221,7 @@ test('formats individual failures with xUnit reason fields and UI error fallback
     const uiBlocks = formatFailureBlocks(uiError);
     assert.equal(uiBlocks[0].type, 'container');
     assert.equal(uiBlocks[0].title.text, 'ERROR · ui.auth: unavailable auth flow');
-    assert.equal(uiBlocks[0].child_blocks[0].text.text, 'unavailable auth flow');
+    assert.equal(uiBlocks[0].child_blocks[0].text.text, '`unavailable auth flow`');
     assert.match(JSON.stringify(uiBlocks), /browser timeout/);
     assert.doesNotMatch(JSON.stringify(uiBlocks), /\*ERROR|\*browser timeout\*/);
 });
@@ -236,9 +236,9 @@ test('keeps the full title and puts only the copyable test name first in details
 
     assert.ok(blocks[0].title.text.length <= 150);
     assert.match(blocks[0].title.text, /^FAIL · integration › Users/);
-    assert.match(blocks[0].child_blocks[0].text.text, /^long test name/);
+    assert.match(blocks[0].child_blocks[0].text.text, /^`long test name/);
     assert.doesNotMatch(blocks[0].child_blocks[0].text.text, /integration|Users|FAIL|run #42/);
-    assert.equal(blocks[0].child_blocks[0].text.type, 'plain_text');
+    assert.equal(blocks[0].child_blocks[0].text.type, 'mrkdwn');
     assert.equal(blocks[0].title.type, 'plain_text');
     assert.equal(blocks[0].type, 'container');
 });
@@ -506,7 +506,7 @@ test('posts ordered test replies in the overview thread', async () => {
     assert.ok(failureDetails.child_blocks.length <= 10);
     const renderedDetails = JSON.stringify(failureDetails.child_blocks);
     assert.match(renderedDetails, /Did not match snapshot/);
-    assert.match(renderedDetails, /"text":"get users of group, no page and no page size"/);
+    assert.match(renderedDetails, /`get users of group, no page and no page size`/);
     assert.doesNotMatch(renderedDetails, /FAIL · #4 integration|\*Did not match snapshot\*/);
     assert.match(renderedDetails, /averageRating: null/);
     assert.match(payloads[2].text, /#20 integration/);
