@@ -220,6 +220,17 @@ test('formats individual failures with xUnit reason fields and UI error fallback
     assert.doesNotMatch(JSON.stringify(uiBlocks), /\*ERROR|\*browser timeout\*/);
 });
 
+test('limits collapsible test titles to Slack 150-character limit', () => {
+    const blocks = formatFailureBlocks({
+        name: `integration ${'long test name '.repeat(20)}`,
+        kind: 'failure',
+        detail: 'assertion failed',
+    }, '', '42');
+
+    assert.ok(blocks[0].title.text.length <= 150);
+    assert.ok(blocks[0].title.text.endsWith(' · run #42'));
+});
+
 test('bounds Block Kit failure details and omits unsafe links', () => {
     const report = {
         passed: 0,

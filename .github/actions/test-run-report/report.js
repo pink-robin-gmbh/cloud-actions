@@ -377,7 +377,11 @@ function formatFailureMessage(failure, secret = '', runId = '') {
 
 function formatFailureBlocks(failure, secret = '', runId = '') {
     const [title] = formatFailureMessage(failure, secret, runId).split('\n');
-    return formatFailureDetails({ failures: [failure] }, secret, title);
+    const runSuffix = runId ? ` · run #${runId}` : '';
+    const boundedTitle = title.length <= 150
+        ? title
+        : `${title.slice(0, Math.max(0, 150 - runSuffix.length))}${runSuffix}`.slice(0, 150);
+    return formatFailureDetails({ failures: [failure] }, secret, boundedTitle);
 }
 
 function formatFailureDetails(report, secret = '', title = 'Expand for failure details') {
