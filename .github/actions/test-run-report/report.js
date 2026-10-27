@@ -8,6 +8,7 @@ const MAX_FAILURE_NAME_LENGTH = 180;
 const MAX_BLOCK_TEXT_LENGTH = 3000;
 const MAX_CONTAINER_CHILD_BLOCKS = 10;
 const MAX_RATE_LIMIT_RETRIES = 5;
+const SLACK_MESSAGE_INTERVAL_MS = 1050;
 
 const CREDENTIAL_PATTERNS = [
     /\b[A-Z0-9_-]*(?:AUTHORIZATION|PASSWORD|PASSWD|SECRET|TOKEN|API[_-]?KEY|CLIENT[_-]?SECRET)[A-Z0-9_-]*\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^,\s"'<>]+)/gi,
@@ -18,6 +19,17 @@ const CREDENTIAL_PATTERNS = [
 ];
 
 class ReportError extends Error {}
+
+let nextSlackMessageAt = 0;
+
+async function waitForSlackMessageSlot(notBefore = 0) {
+    const now = Date.now();
+    const scheduledAt = Math.max(now, nextSlackMessageAt, notBefore);
+    nextSlackMessageAt = scheduledAt + SLACK_MESSAGE_INTERVAL_MS;
+    if (scheduledAt > now) {
+        await new Promise((resolve) => setTimeout(resolve, scheduledAt - now));
+    }
+}
 
 const parser = new XMLParser({
     ignoreAttributes: false,
@@ -434,7 +446,9 @@ async function sendMessage(channel, token, message, blocks, threadTs) {
 
     let response;
     let rateLimitRetries = 0;
+    let retryNotBefore = 0;
     while (true) {
+        await waitForSlackMessageSlot(retryNotBefore);
         try {
         response = await fetch('https://slack.com/api/chat.postMessage', {
             method: 'POST',
@@ -465,8 +479,7 @@ async function sendMessage(channel, token, message, blocks, threadTs) {
             || !Number.isFinite(retryAfter) || retryAfter < 0) {
             throw new Error('Slack rate limit response did not include a valid Retry-After header');
         }
-        const jitter = Math.floor(Math.random() * 250);
-        await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000 + jitter));
+        retryNotBefore = Date.now() + retryAfter * 1000;
         rateLimitRetries += 1;
     }
 

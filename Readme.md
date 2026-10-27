@@ -29,10 +29,12 @@ variable.
 Each report posts its overview and individual test messages in report order.
 Concurrent UI and integration runs may interleave, but every test remains a
 separate channel message that can be discussed in its own thread. Slack can
-rate-limit messages to a channel; the action retries HTTP 429 responses up to
-five times using Slack's
-`Retry-After` header. Use a descriptive `workflow` value to distinguish
-concurrent overview messages, such as `UI tests` and `Integration tests`.
+rate-limit messages to a channel; each action run spaces its messages at least
+one second apart and retries HTTP 429 responses up to five times using Slack's
+`Retry-After` header. Concurrent runs do not share this pacing and can still
+compete for the channel limit. Use a descriptive `workflow` value to
+distinguish concurrent overview messages, such as `UI tests` and `Integration
+tests`.
 
 The manually triggered `Test Slack report formatting` workflow posts a trimmed
 sample report with 23 test cases (14 passed, 4 failed, and 5 skipped). It keeps

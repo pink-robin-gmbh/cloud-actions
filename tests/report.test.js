@@ -438,7 +438,7 @@ test('posts the overview and individual tests as separate channel messages', asy
     const messages = [];
     let timestamp = 0;
     await withMockFetch(async (_url, options) => {
-        messages.push(JSON.parse(options.body));
+        messages.push({ payload: JSON.parse(options.body), sentAt: Date.now() });
         timestamp += 1;
         return { ok: true, json: async () => ({ ok: true, ts: `123.45${timestamp}` }) };
     }, async () => {
@@ -458,16 +458,20 @@ test('posts the overview and individual tests as separate channel messages', asy
 
     const failures = parseReport(path.join(fixturesPath, 'slack-report.xml')).failures;
     assert.equal(messages.length, failures.length + 1);
-    assert.match(messages[0].blocks[0].text.text, /FAILURE · Integration tests/);
-    assert.match(messages[0].text, /4 failed/);
-    assert.doesNotMatch(JSON.stringify(messages[0].blocks), /#4 integration/);
-    assert.ok(messages.every((message) => message.thread_ts === undefined));
+    const payloads = messages.map(({ payload }) => payload);
+    assert.match(payloads[0].blocks[0].text.text, /FAILURE · Integration tests/);
+    assert.match(payloads[0].text, /4 failed/);
+    assert.doesNotMatch(JSON.stringify(payloads[0].blocks), /#4 integration/);
+    assert.ok(payloads.every((message) => message.thread_ts === undefined));
+    assert.ok(messages.slice(1).every(({ sentAt }, index) => (
+        sentAt - messages[index].sentAt >= 1000
+    )));
     assert.deepEqual(
-        messages.slice(1).map((message) => message.text.split('\n')[0]),
+        payloads.slice(1).map((message) => message.text.split('\n')[0]),
         failures.map(({ name, kind }) => `${kind === 'error' ? 'ERROR' : 'FAIL'} · ${name}`),
     );
-    assert.ok(messages.slice(1).every((message) => message.blocks.some((block) => block.type === 'container')));
-    const failureDetails = messages[1].blocks.find((block) => block.type === 'container');
+    assert.ok(payloads.slice(1).every((message) => message.blocks.some((block) => block.type === 'container')));
+    const failureDetails = payloads[1].blocks.find((block) => block.type === 'container');
     assert.ok(failureDetails);
     assert.equal(failureDetails.title.text, 'FAIL · #4 integration › Users › getUsersOfGroup › /get users of group, no page and no page size');
     assert.equal(failureDetails.is_collapsible && failureDetails.default_collapsed, true);
@@ -477,9 +481,9 @@ test('posts the overview and individual tests as separate channel messages', asy
     assert.match(renderedDetails, /Did not match snapshot/);
     assert.doesNotMatch(renderedDetails, /\*FAIL|\*Did not match snapshot\*/);
     assert.match(renderedDetails, /averageRating: null/);
-    assert.match(messages[2].text, /#20 integration/);
-    assert.match(messages[2].text, /order_complete/);
-    assert.equal(messages[0].blocks.at(-1).type, 'actions');
+    assert.match(payloads[2].text, /#20 integration/);
+    assert.match(payloads[2].text, /order_complete/);
+    assert.equal(payloads[0].blocks.at(-1).type, 'actions');
 });
 
 test('writes a sanitized warning when Slack rejects a valid report', async () => {
