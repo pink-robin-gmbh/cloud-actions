@@ -468,12 +468,14 @@ test('posts the overview and individual tests as separate channel messages', asy
     )));
     assert.deepEqual(
         payloads.slice(1).map((message) => message.text.split('\n')[0]),
-        failures.map(({ name, kind }) => `${kind === 'error' ? 'ERROR' : 'FAIL'} · ${name}`),
+        failures.map(({ name, kind }) => (
+            `${kind === 'error' ? 'ERROR' : 'FAIL'} · ${name} · run #42`
+        )),
     );
     assert.ok(payloads.slice(1).every((message) => message.blocks.some((block) => block.type === 'container')));
     const failureDetails = payloads[1].blocks.find((block) => block.type === 'container');
     assert.ok(failureDetails);
-    assert.equal(failureDetails.title.text, 'FAIL · #4 integration › Users › getUsersOfGroup › /get users of group, no page and no page size');
+    assert.equal(failureDetails.title.text, 'FAIL · #4 integration › Users › getUsersOfGroup › /get users of group, no page and no page size · run #42');
     assert.equal(failureDetails.is_collapsible && failureDetails.default_collapsed, true);
     assert.ok(failureDetails.child_blocks.length <= 10);
     const renderedDetails = JSON.stringify(failureDetails.child_blocks);

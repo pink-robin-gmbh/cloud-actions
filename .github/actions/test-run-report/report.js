@@ -366,17 +366,17 @@ function formatBlocks(report, metadata, reportError, secret = '') {
     return blocks;
 }
 
-function formatFailureMessage(failure, secret = '') {
+function formatFailureMessage(failure, secret = '', runId = '') {
     const name = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH)
         || 'unnamed test';
     const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH)
         || 'Reason unavailable in xUnit report.';
     const kind = failure.kind === 'error' ? 'ERROR' : 'FAIL';
-    return `${kind} · ${name}\n${detail}`;
+    return `${kind} · ${name}${runId ? ` · run #${runId}` : ''}\n${detail}`;
 }
 
-function formatFailureBlocks(failure, secret = '') {
-    const [title] = formatFailureMessage(failure, secret).split('\n');
+function formatFailureBlocks(failure, secret = '', runId = '') {
+    const [title] = formatFailureMessage(failure, secret, runId).split('\n');
     return formatFailureDetails({ failures: [failure] }, secret, title);
 }
 
@@ -537,6 +537,7 @@ async function main(environment = process.env) {
     };
     const message = formatMessage(report, metadata, reportError, token);
     const blocks = formatBlocks(report, metadata, reportError, token);
+    const runId = String(metadata.runUrl || '').match(/\/actions\/runs\/(\d+)(?:[/?#]|$)/)?.[1] || '';
     const errors = [];
     if (reportError) errors.push(reportError);
     try {
@@ -556,8 +557,8 @@ async function main(environment = process.env) {
                 await sendMessage(
                     environment.SLACK_CHANNEL_ID || '',
                     token,
-                    formatFailureMessage(failure, token),
-                    formatFailureBlocks(failure, token),
+                    formatFailureMessage(failure, token, runId),
+                    formatFailureBlocks(failure, token, runId),
                 );
             } catch (error) {
                 errors.push(error.message);
