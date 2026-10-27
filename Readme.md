@@ -16,15 +16,28 @@ This library contains shared workflows for projects managed and build by Pink Ro
 
 ## Slack test-run report action
 
-Parses an xUnit report and posts a Block Kit summary card with test metrics,
-failure details, and links to the workflow run and report artifact. A plain-text
+Parses an xUnit report and posts a Block Kit overview with test metrics and
+links to the workflow run and report artifact. Each failed or errored test is
+then posted as a separate reply in that overview's Slack thread. Tests with
+captured xUnit values use a collapsible details box; reports with only an error
+message use a concise test-name and error reply. Passing and skipped tests are
+counted in the overview but do not get individual messages. A plain-text
 fallback is included for notifications. Set `SLACK_BOT_TOKEN`
 (with `chat:write` access) as a secret and `SLACK_CHANNEL_ID` as a repository
 variable.
 
+Each report creates its own overview; failed and errored tests are posted as
+replies in that overview's thread, keeping concurrent UI and integration runs
+grouped separately. Replies are sent in report order. Concurrent overview
+messages may arrive in either order, but replies stay attached to the correct
+report. Slack can rate-limit messages to a channel; the action retries HTTP
+429 responses up to five times using Slack's
+`Retry-After` header. Use a descriptive `workflow` value to distinguish
+concurrent overview messages, such as `UI tests` and `Integration tests`.
+
 The manually triggered `Test Slack report formatting` workflow posts a trimmed
 sample report with 23 test cases (14 passed, 4 failed, and 5 skipped). It keeps
-the original failure details while omitting most passing cases.
+the original failure details in individual thread replies.
 
 ```yaml
 - name: Report test run to Slack
