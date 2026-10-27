@@ -200,35 +200,41 @@ test('formats individual failures with xUnit reason fields and UI error fallback
         ['*Passed*\n14', '*Skipped*\n5', '*Failures*\n4', '*Errors*\n0', '*Total tests*\n23', '*Duration*\nunavailable'],
     );
     assert.doesNotMatch(rendered, /#4 integration/);
-    assert.equal(failureBlocks.length, 1);
-    const details = failureBlocks[0];
+    assert.equal(failureBlocks.length, 2);
+    const [testHeading, details] = failureBlocks;
     assert.ok(details);
-    assert.equal(details.title.text, 'FAIL · #4 integration › Users › getUsersOfGroup › /get users of group, no page and no page size');
+    assert.equal(testHeading.type, 'context');
+    assert.equal(
+        testHeading.elements[0].text,
+        'FAIL · #4 integration › Users › getUsersOfGroup › /get users of group, no page and no page size',
+    );
+    assert.equal(details.title.text, 'Details');
     assert.equal(details.is_collapsible, true);
     assert.equal(details.default_collapsed, true);
     assert.ok(details.child_blocks.some((block) => block.text.text.includes('averageRating: null')));
-    assert.match(JSON.stringify(details), /FAIL · #4 integration › Users › getUsersOfGroup/);
-    assert.doesNotMatch(JSON.stringify(details), /\*FAIL|\*Did not match snapshot\*/);
+    assert.doesNotMatch(JSON.stringify(details), /FAIL · #4 integration|no page and no page size/);
+    assert.doesNotMatch(JSON.stringify(details), /\*Did not match snapshot\*/);
     assert.match(formatFailureMessage(report.failures[0]), /^FAIL · #4 integration/);
 
     const uiReport = parseReport(path.join(fixturesPath, 'ui-report.xml'));
     const uiError = uiReport.failures.find(({ kind }) => kind === 'error');
     const uiBlocks = formatFailureBlocks(uiError);
-    assert.equal(uiBlocks[0].type, 'container');
-    assert.equal(uiBlocks[0].title.text, 'ERROR · ui.auth: unavailable auth flow');
+    assert.equal(uiBlocks[0].type, 'context');
+    assert.equal(uiBlocks[0].elements[0].text, 'ERROR · ui.auth: unavailable auth flow');
+    assert.equal(uiBlocks[1].title.text, 'Details');
     assert.match(JSON.stringify(uiBlocks), /browser timeout/);
     assert.doesNotMatch(JSON.stringify(uiBlocks), /\*ERROR|\*browser timeout\*/);
 });
 
-test('limits collapsible test titles to Slack 150-character limit', () => {
+test('keeps test headings outside the generic collapsible title', () => {
     const blocks = formatFailureBlocks({
         name: `integration ${'long test name '.repeat(20)}`,
         kind: 'failure',
         detail: 'assertion failed',
     }, '', '42');
 
-    assert.ok(blocks[0].title.text.length <= 150);
-    assert.ok(blocks[0].title.text.endsWith(' · run #42'));
+    assert.match(blocks[0].elements[0].text, / · run #42$/);
+    assert.equal(blocks[1].title.text, 'Details');
 });
 
 test('bounds Block Kit failure details and omits unsafe links', () => {
@@ -445,7 +451,7 @@ test('posts an unavailable-report warning without fabricated counts', async () =
     assert.ok(logs.every((line) => !line.includes('bot-secret')));
 });
 
-test('posts the overview and individual tests as separate channel messages', async () => {
+test('posts ordered test replies in the overview thread', async () => {
     const messages = [];
     let timestamp = 0;
     await withMockFetch(async (_url, options) => {
@@ -473,7 +479,9 @@ test('posts the overview and individual tests as separate channel messages', asy
     assert.match(payloads[0].blocks[0].text.text, /FAILURE · Integration tests/);
     assert.match(payloads[0].text, /4 failed/);
     assert.doesNotMatch(JSON.stringify(payloads[0].blocks), /#4 integration/);
-    assert.ok(payloads.every((message) => message.thread_ts === undefined));
+    assert.equal(payloads[0].thread_ts, undefined);
+    assert.ok(payloads.slice(1).every((message) => message.thread_ts === '123.451'));
+    assert.ok(payloads.slice(1).every((message) => message.reply_broadcast === false));
     assert.ok(messages.slice(1).every(({ sentAt }, index) => (
         sentAt - messages[index].sentAt >= 1000
     )));
@@ -483,14 +491,16 @@ test('posts the overview and individual tests as separate channel messages', asy
             `${kind === 'error' ? 'ERROR' : 'FAIL'} · ${name} · run #42`
         )),
     );
-    assert.ok(payloads.slice(1).every((message) => message.blocks.some((block) => block.type === 'container')));
+    assert.ok(payloads.slice(1).every((message) => (
+        message.blocks[0].type === 'context'
+        && message.blocks.some((block) => block.type === 'container')
+    )));
     const failureDetails = payloads[1].blocks.find((block) => block.type === 'container');
     assert.ok(failureDetails);
-    assert.equal(failureDetails.title.text, 'FAIL · #4 integration › Users › getUsersOfGroup › /get users of group, no page and no page size · run #42');
+    assert.equal(failureDetails.title.text, 'Details');
     assert.equal(failureDetails.is_collapsible && failureDetails.default_collapsed, true);
     assert.ok(failureDetails.child_blocks.length <= 10);
     const renderedDetails = JSON.stringify(failureDetails.child_blocks);
-    assert.match(renderedDetails, /#4 integration/);
     assert.match(renderedDetails, /Did not match snapshot/);
     assert.doesNotMatch(renderedDetails, /\*FAIL|\*Did not match snapshot\*/);
     assert.match(renderedDetails, /averageRating: null/);

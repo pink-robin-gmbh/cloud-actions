@@ -18,19 +18,19 @@ This library contains shared workflows for projects managed and build by Pink Ro
 
 Parses an xUnit report and posts a Block Kit overview with test metrics and
 links to the workflow run and report artifact. Each failed or errored test is
-then posted as a separate message in the channel, with its own collapsible
-details box titled with the test name and run ID. Developers can reply to each
-test message to discuss it in its own thread. Passing and skipped tests are
-counted in the overview but do not get individual messages. A plain-text
-fallback is included for notifications. Set `SLACK_BOT_TOKEN`
+then posted as a reply in the overview's thread, with a small test-name and run
+identifier above a collapsible `Details` box. Developers can discuss all
+failing tests in this single thread. Passing and skipped tests are counted in
+the overview but do not get individual replies. A plain-text fallback is
+included for notifications. Set `SLACK_BOT_TOKEN`
 (with `chat:write` access) as a secret and `SLACK_CHANNEL_ID` as a repository
 variable.
 
-Each report posts its overview and individual test messages in report order.
-Concurrent UI and integration runs may interleave, but every test remains a
-separate channel message that can be discussed in its own thread. Slack can
-rate-limit messages to a channel; each action run spaces its messages at least
-one second apart and retries HTTP 429 responses up to five times using Slack's
+Each report posts one overview in the channel; test replies are sent in report
+order in its thread. Concurrent UI and integration overviews may arrive in
+either order, while each run's tests stay grouped under the correct overview.
+Slack can rate-limit messages to a channel; each action run spaces its messages
+at least one second apart and retries HTTP 429 responses up to five times using Slack's
 `Retry-After` header. Concurrent runs do not share this pacing and can still
 compete for the channel limit. Use a descriptive `workflow` value to
 distinguish concurrent overview messages, such as `UI tests` and `Integration
@@ -38,7 +38,7 @@ tests`.
 
 The manually triggered `Test Slack report formatting` workflow posts a trimmed
 sample report with 23 test cases (14 passed, 4 failed, and 5 skipped). It keeps
-the original failure details in individual channel messages.
+the original failure details in the overview thread.
 
 ```yaml
 - name: Report test run to Slack

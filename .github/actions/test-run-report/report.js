@@ -376,15 +376,14 @@ function formatFailureMessage(failure, secret = '', runId = '') {
 }
 
 function formatFailureBlocks(failure, secret = '', runId = '') {
-    const [title] = formatFailureMessage(failure, secret, runId).split('\n');
-    const runSuffix = runId ? ` · run #${runId}` : '';
-    const boundedTitle = title.length <= 150
-        ? title
-        : `${title.slice(0, Math.max(0, 150 - runSuffix.length))}${runSuffix}`.slice(0, 150);
-    return formatFailureDetails({ failures: [failure] }, secret, boundedTitle);
+    const [heading] = formatFailureMessage(failure, secret, runId).split('\n');
+    return [{
+        type: 'context',
+        elements: [{ type: 'plain_text', text: heading.slice(0, 300) }],
+    }, ...formatFailureDetails({ failures: [failure] }, secret, 'Details', false)];
 }
 
-function formatFailureDetails(report, secret = '', title = 'Expand for failure details') {
+function formatFailureDetails(report, secret = '', title = 'Expand for failure details', includeTestNames = true) {
     const failures = report ? report.failures : [];
     if (!failures.length) return [];
 
@@ -395,7 +394,9 @@ function formatFailureDetails(report, secret = '', title = 'Expand for failure d
         const name = sanitizeTestName(failure.name, secret).slice(0, MAX_FAILURE_NAME_LENGTH)
             || 'unnamed test';
         const detail = sanitizeText(failure.detail, secret).slice(0, MAX_FAILURE_DETAIL_LENGTH);
-        let failureText = `${failure.kind === 'error' ? 'ERROR' : 'FAIL'} · ${name}\n${detail || 'Reason unavailable in xUnit report.'}`;
+        let failureText = includeTestNames
+            ? `${failure.kind === 'error' ? 'ERROR' : 'FAIL'} · ${name}\n${detail || 'Reason unavailable in xUnit report.'}`
+            : detail || 'Reason unavailable in xUnit report.';
         if (failure.values) {
             const values = sanitizeCode(failure.values, secret);
             const valueLimit = Math.min(
@@ -544,8 +545,9 @@ async function main(environment = process.env) {
     const runId = String(metadata.runUrl || '').match(/\/actions\/runs\/(\d+)(?:[/?#]|$)/)?.[1] || '';
     const errors = [];
     if (reportError) errors.push(reportError);
+    let threadTs;
     try {
-        await sendMessage(
+        threadTs = await sendMessage(
             environment.SLACK_CHANNEL_ID || '',
             token,
             message,
@@ -555,7 +557,7 @@ async function main(environment = process.env) {
         errors.push(error.message);
     }
 
-    if (report) {
+    if (threadTs && report) {
         for (const failure of report.failures) {
             try {
                 await sendMessage(
@@ -563,6 +565,7 @@ async function main(environment = process.env) {
                     token,
                     formatFailureMessage(failure, token, runId),
                     formatFailureBlocks(failure, token, runId),
+                    threadTs,
                 );
             } catch (error) {
                 errors.push(error.message);
