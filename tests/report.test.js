@@ -434,11 +434,13 @@ test('posts an unavailable-report warning without fabricated counts', async () =
     assert.ok(logs.every((line) => !line.includes('bot-secret')));
 });
 
-test('posts the overview followed by ordered per-test replies in its thread', async () => {
+test('posts the overview and individual tests as separate channel messages', async () => {
     const messages = [];
+    let timestamp = 0;
     await withMockFetch(async (_url, options) => {
         messages.push(JSON.parse(options.body));
-        return { ok: true, json: async () => ({ ok: true, ts: '123.456' }) };
+        timestamp += 1;
+        return { ok: true, json: async () => ({ ok: true, ts: `123.45${timestamp}` }) };
     }, async () => {
         const result = await main({
             REPORT_PATH: path.join(fixturesPath, 'slack-report.xml'),
@@ -459,13 +461,12 @@ test('posts the overview followed by ordered per-test replies in its thread', as
     assert.match(messages[0].blocks[0].text.text, /FAILURE · Integration tests/);
     assert.match(messages[0].text, /4 failed/);
     assert.doesNotMatch(JSON.stringify(messages[0].blocks), /#4 integration/);
-    assert.equal(messages[0].thread_ts, undefined);
-    assert.ok(messages.slice(1).every((message) => message.thread_ts === '123.456'));
-    assert.ok(messages.slice(1).every((message) => message.reply_broadcast === false));
+    assert.ok(messages.every((message) => message.thread_ts === undefined));
     assert.deepEqual(
         messages.slice(1).map((message) => message.text.split('\n')[0]),
         failures.map(({ name, kind }) => `${kind === 'error' ? 'ERROR' : 'FAIL'} · ${name}`),
     );
+    assert.ok(messages.slice(1).every((message) => message.blocks.some((block) => block.type === 'container')));
     const failureDetails = messages[1].blocks.find((block) => block.type === 'container');
     assert.ok(failureDetails);
     assert.equal(failureDetails.title.text, 'FAIL · #4 integration › Users › getUsersOfGroup › /get users of group, no page and no page size');

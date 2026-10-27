@@ -526,9 +526,8 @@ async function main(environment = process.env) {
     const blocks = formatBlocks(report, metadata, reportError, token);
     const errors = [];
     if (reportError) errors.push(reportError);
-    let threadTs;
     try {
-        threadTs = await sendMessage(
+        await sendMessage(
             environment.SLACK_CHANNEL_ID || '',
             token,
             message,
@@ -538,7 +537,7 @@ async function main(environment = process.env) {
         errors.push(error.message);
     }
 
-    if (threadTs && report) {
+    if (report) {
         for (const failure of report.failures) {
             try {
                 await sendMessage(
@@ -546,7 +545,6 @@ async function main(environment = process.env) {
                     token,
                     formatFailureMessage(failure, token),
                     formatFailureBlocks(failure, token),
-                    threadTs,
                 );
             } catch (error) {
                 errors.push(error.message);
